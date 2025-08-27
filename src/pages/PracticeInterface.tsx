@@ -201,9 +201,9 @@ const PracticeInterface = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Question Panel (70%) */}
-        <div className="flex-[7] flex flex-col p-6 overflow-y-auto">
+        <div className="lg:flex-[7] flex flex-col p-6 overflow-y-auto lg:border-r">
           {currentQuestion && (
             <div className="max-w-4xl mx-auto space-y-6">
               {/* Question Text */}
@@ -270,7 +270,7 @@ const PracticeInterface = () => {
         </div>
 
         {/* Navigation Panel (30%) */}
-        <div className="flex-[3] border-l bg-muted/30 p-4 space-y-4 overflow-y-auto">
+        <div className="lg:flex-[3] border-l bg-muted/30 p-4 space-y-4 overflow-y-auto">
           <QuestionNavigator />
           <SessionControls />
         </div>

@@ -2,6 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { ProgressChart } from "@/components/ProgressChart";
 import { 
   BarChart3, 
   BookOpen, 
@@ -14,25 +15,19 @@ import {
   Flame
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useApp } from "@/context/AppContext";
 
 const Dashboard = () => {
-  // Mock data
-  const studyStreak = 12;
-  const totalQuestions = 1247;
-  const averageScore = 78;
-  const timeThisWeek = 420; // minutes
+  const { state } = useApp();
+  
+  // Use analytics data from state
+  const studyStreak = state.analytics.overallStats.studyStreak;
+  const totalQuestions = state.analytics.overallStats.totalQuestions;
+  const averageScore = state.analytics.overallStats.averageScore;
+  const timeThisWeek = state.analytics.overallStats.timeSpentThisWeek;
 
-  const subjectPerformance = [
-    { subject: "Math", attempted: 456, accuracy: 82, avgTime: 90, progress: 82 },
-    { subject: "Verbal", attempted: 234, accuracy: 76, avgTime: 65, progress: 76 },
-    { subject: "Reading", attempted: 167, accuracy: 81, avgTime: 120, progress: 81 }
-  ];
-
-  const recentSessions = [
-    { date: "2024-01-25", test: "SHSAT", score: 81, questions: 30 },
-    { date: "2024-01-22", test: "SHSAT", score: 79, questions: 25 },
-    { date: "2024-01-18", test: "SHSAT", score: 76, questions: 30 }
-  ];
+  const subjectPerformance = state.analytics.performanceBySubject;
+  const recentSessions = state.analytics.scoreHistory.slice(-3).reverse();
 
   const formatTime = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -44,7 +39,7 @@ const Dashboard = () => {
     <div className="space-y-8">
       {/* Welcome Section */}
       <div>
-        <h1 className="text-3xl font-bold text-foreground">Welcome back, John!</h1>
+        <h1 className="text-3xl font-bold text-foreground">Welcome back, {state.user.firstName}!</h1>
         <p className="text-muted-foreground mt-2">
           Keep up the great work. You're on a {studyStreak}-day study streak! 🔥
         </p>
@@ -144,7 +139,7 @@ const Dashboard = () => {
                     <div>
                       <p className="font-medium text-foreground">{subject.subject}</p>
                       <p className="text-sm text-muted-foreground">
-                        {subject.attempted} questions • Avg {formatTime(subject.avgTime)}
+                        {subject.questionsAttempted} questions • Avg {formatTime(subject.averageTime)}
                       </p>
                     </div>
                   </div>
@@ -153,7 +148,7 @@ const Dashboard = () => {
                     <p className="text-xs text-muted-foreground">accuracy</p>
                   </div>
                 </div>
-                <Progress value={subject.progress} className="h-2" />
+                <Progress value={subject.accuracy} className="h-2" />
               </div>
             ))}
           </CardContent>
@@ -178,9 +173,9 @@ const Dashboard = () => {
                       <BookOpen className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <p className="font-medium text-foreground">{session.test} Practice</p>
+                      <p className="font-medium text-foreground">{session.testType} Practice</p>
                       <p className="text-sm text-muted-foreground">
-                        {session.questions} questions • {session.date}
+                        {session.sessionType.replace('_', ' ')} • {session.date}
                       </p>
                     </div>
                   </div>
@@ -201,32 +196,53 @@ const Dashboard = () => {
         </Card>
       </div>
 
+      {/* Score Progress Chart */}
+      <ProgressChart 
+        data={state.analytics.scoreHistory}
+        title="Score Progress"
+        description="Your performance trend over time"
+      />
+
       {/* Quick Actions */}
       <Card>
         <CardHeader>
           <CardTitle>Continue Your Prep</CardTitle>
           <CardDescription>
             Pick up where you left off or start something new
+            {state.practiceSession && !state.practiceSession.isCompleted && (
+              <Badge variant="secondary" className="ml-2">Session in progress</Badge>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Link to="/practice">
-              <Button className="w-full h-20 flex flex-col items-center justify-center space-y-2">
-                <Play className="h-6 w-6" />
-                <span>Start Practice</span>
-              </Button>
-            </Link>
-            <Link to="/analytics">
+            {state.practiceSession && !state.practiceSession.isCompleted ? (
+              <Link to={`/dashboard/practice/session/${state.practiceSession.id}`}>
+                <Button className="w-full h-20 flex flex-col items-center justify-center space-y-2">
+                  <Play className="h-6 w-6" />
+                  <span>Continue Last Session</span>
+                </Button>
+              </Link>
+            ) : (
+              <Link to="/dashboard/practice">
+                <Button className="w-full h-20 flex flex-col items-center justify-center space-y-2">
+                  <Play className="h-6 w-6" />
+                  <span>Start Practice</span>
+                </Button>
+              </Link>
+            )}
+            <Link to="/dashboard/analytics">
               <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center space-y-2">
                 <BarChart3 className="h-6 w-6" />
                 <span>View Analytics</span>
               </Button>
             </Link>
-            <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center space-y-2">
-              <Target className="h-6 w-6" />
-              <span>Review Weak Areas</span>
-            </Button>
+            <Link to="/dashboard/topics">
+              <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center space-y-2">
+                <Target className="h-6 w-6" />
+                <span>Review Weak Areas</span>
+              </Button>
+            </Link>
           </div>
         </CardContent>
       </Card>

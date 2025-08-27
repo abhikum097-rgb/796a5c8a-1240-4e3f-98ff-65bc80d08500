@@ -1,275 +1,258 @@
+import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DifficultyBadge } from "@/components/DifficultyBadge";
+import { useApp } from "@/context/AppContext";
+import { useNavigate } from "react-router-dom";
+import { generateMockQuestions, fullTestQuestions } from "@/mock/data";
 import { 
   BookOpen, 
   Clock, 
   Target, 
-  Play, 
-  BarChart3,
-  Calculator,
-  MessageSquare,
-  FileText,
-  ChevronRight
+  TrendingUp,
+  Play,
+  ChevronRight,
+  Zap,
+  Brain,
+  RotateCcw
 } from "lucide-react";
 
 const Practice = () => {
-  const testTypes = [
-    {
-      name: "SHSAT",
-      fullName: "Specialized High Schools Admissions Test",
-      description: "NYC specialized high school entrance exam",
-      progress: 65,
-      lastScore: 81,
-      questionsAttempted: 456
-    },
-    {
-      name: "SSAT",
-      fullName: "Secondary School Admission Test",
-      description: "Private school admission test",
-      progress: 40,
-      lastScore: 72,
-      questionsAttempted: 234
-    },
-    {
-      name: "ISEE",
-      fullName: "Independent School Entrance Exam",
-      description: "Private school entrance examination",
-      progress: 25,
-      lastScore: null,
-      questionsAttempted: 67
-    },
-    {
-      name: "HSPT",
-      fullName: "High School Placement Test",
-      description: "Catholic high school admission test",
-      progress: 0,
-      lastScore: null,
-      questionsAttempted: 0
-    },
-    {
-      name: "TACHS",
-      fullName: "Test for Admission into Catholic High Schools",
-      description: "Catholic high school entrance exam (NYC area)",
-      progress: 0,
-      lastScore: null,
-      questionsAttempted: 0
-    }
-  ];
+  const { state, dispatch } = useApp();
+  const navigate = useNavigate();
 
-  const practiceMode = [
-    {
-      title: "Full Practice Test",
-      description: "Complete timed exam simulation",
-      icon: Clock,
-      time: "2-3 hours",
-      questions: "50-100",
-      difficulty: "Mixed",
-      color: "text-primary"
-    },
-    {
-      title: "Topic Practice",
-      description: "Focus on specific subjects",
-      icon: Target,
-      time: "15-30 min",
-      questions: "10-25",
-      difficulty: "Selectable",
-      color: "text-success"
-    },
-    {
-      title: "Mixed Review",
-      description: "Random questions from all topics",
-      icon: BarChart3,
-      time: "10-20 min",
-      questions: "15-20",
-      difficulty: "Adaptive",
-      color: "text-warning"
-    }
-  ];
+  const startSession = (config: any) => {
+    dispatch({
+      type: 'START_SESSION',
+      payload: {
+        testType: state.user.selectedTest || 'SHSAT',
+        ...config
+      }
+    });
+    navigate(`/dashboard/practice/session/${Date.now()}`);
+  };
 
-  const subjects = [
-    {
-      name: "Math",
-      icon: Calculator,
-      topics: ["Algebra", "Geometry", "Arithmetic", "Word Problems"],
-      progress: 82,
-      available: 567,
-      avgAccuracy: 78
-    },
-    {
-      name: "Verbal",
-      icon: MessageSquare,
-      topics: ["Vocabulary", "Synonyms", "Analogies", "Logic"],
-      progress: 76,
-      available: 423,
-      avgAccuracy: 73
-    },
-    {
-      name: "Reading",
-      icon: FileText,
-      topics: ["Comprehension", "Inference", "Main Ideas", "Analysis"],
-      progress: 81,
-      available: 298,
-      avgAccuracy: 85
-    }
-  ];
+  const FullTestsSection = () => (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <Card className="hover:shadow-md transition-all duration-200">
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>{state.user.selectedTest || 'SHSAT'}</span>
+            <Badge variant="outline">Full Test</Badge>
+          </CardTitle>
+          <CardDescription>Complete exam simulation</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="flex items-center space-x-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <span>2.5 hours</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <BookOpen className="h-4 w-4 text-muted-foreground" />
+              <span>89 questions</span>
+            </div>
+          </div>
+          <Button 
+            className="w-full"
+            onClick={() => startSession({
+              sessionType: 'full_test',
+              questions: fullTestQuestions
+            })}
+          >
+            <Play className="h-4 w-4 mr-2" />
+            Start Full Test
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const SubjectPracticeSection = () => (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {state.analytics.performanceBySubject.map((subject) => (
+        <Card key={subject.subject} className="hover:shadow-md transition-all duration-200">
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-3">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <Target className="h-5 w-5 text-primary" />
+              </div>
+              <span>{subject.subject}</span>
+            </CardTitle>
+            <CardDescription>
+              Accuracy: {subject.accuracy}% • {subject.questionsAttempted} questions
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Topics:</span>
+                <span>{subject.topics.length} available</span>
+              </div>
+              <Progress value={subject.accuracy} className="h-2" />
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => navigate('/dashboard/topics')}
+              >
+                Practice by Topic
+              </Button>
+              <Button 
+                className="flex-1"
+                onClick={() => startSession({
+                  sessionType: 'subject_practice',
+                  subject: subject.subject,
+                  questions: generateMockQuestions(20, { subject: subject.subject })
+                })}
+              >
+                Practice All Topics
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+
+  const TopicPracticeSection = () => (
+    <div className="space-y-6">
+      {state.analytics.performanceBySubject.map((subject) => (
+        <div key={subject.subject}>
+          <h4 className="text-lg font-semibold mb-3">{subject.subject} Topics</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {subject.topics.map((topic) => {
+              const getMasteryColor = (mastery: string) => {
+                switch (mastery) {
+                  case 'Advanced': return 'bg-success text-success-foreground';
+                  case 'Proficient': return 'bg-primary text-primary-foreground';
+                  case 'Intermediate': return 'bg-warning text-warning-foreground';
+                  case 'Beginner': return 'bg-destructive text-destructive-foreground';
+                  default: return 'bg-muted text-muted-foreground';
+                }
+              };
+
+              return (
+                <Card 
+                  key={topic.topic} 
+                  className="hover:shadow-md transition-all duration-200 cursor-pointer"
+                  onClick={() => startSession({
+                    sessionType: 'topic_practice',
+                    subject: subject.subject,
+                    topic: topic.topic,
+                    questions: generateMockQuestions(15, { subject: subject.subject, topic: topic.topic })
+                  })}
+                >
+                  <CardContent className="p-4 space-y-2">
+                    <div className="flex justify-between items-start">
+                      <h5 className="font-medium">{topic.topic}</h5>
+                      <Badge className={getMasteryColor(topic.mastery)} variant="secondary">
+                        {topic.mastery}
+                      </Badge>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {topic.accuracy}% • {topic.questionsAttempted} questions
+                    </div>
+                    <Progress value={topic.accuracy} className="h-1.5" />
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const MixedReviewSection = () => (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {['Easy', 'Medium', 'Hard'].map((difficulty) => (
+        <Card key={difficulty} className="hover:shadow-md transition-all duration-200">
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-3">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <RotateCcw className="h-5 w-5 text-primary" />
+              </div>
+              <span>{difficulty} Mix</span>
+            </CardTitle>
+            <CardDescription>Random {difficulty.toLowerCase()} questions</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="flex items-center space-x-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <span>20-30 min</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <BookOpen className="h-4 w-4 text-muted-foreground" />
+                <span>20 questions</span>
+              </div>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Difficulty:</span>
+              <DifficultyBadge difficulty={difficulty as 'Easy' | 'Medium' | 'Hard'} />
+            </div>
+            <Button 
+              className="w-full"
+              onClick={() => startSession({
+                sessionType: 'mixed_review',
+                difficulty,
+                questions: generateMockQuestions(20, { difficulty })
+              })}
+            >
+              <Play className="h-4 w-4 mr-2" />
+              Start {difficulty} Review
+            </Button>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
 
   return (
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-foreground">Practice Tests</h1>
+        <h1 className="text-3xl font-bold">Practice Tests</h1>
         <p className="text-muted-foreground mt-2">
-          Choose your test type and practice mode to get started
+          Choose your practice mode and start improving your test scores
         </p>
       </div>
 
-      {/* Test Types */}
-      <div>
-        <h2 className="text-xl font-semibold text-foreground mb-4">Select Test Type</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {testTypes.map((test) => (
-            <Card key={test.name} className="hover:shadow-lg transition-shadow cursor-pointer">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">{test.name}</CardTitle>
-                  {test.lastScore && (
-                    <Badge variant="secondary" className="bg-success/10 text-success">
-                      {test.lastScore}%
-                    </Badge>
-                  )}
-                </div>
-                <CardDescription className="text-sm">
-                  {test.fullName}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {test.description}
-                </p>
-                
-                <div className="space-y-3">
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>Progress</span>
-                      <span>{test.progress}%</span>
-                    </div>
-                    <Progress value={test.progress} className="h-2" />
-                  </div>
-                  
-                  <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>Questions Attempted:</span>
-                    <span>{test.questionsAttempted}</span>
-                  </div>
-                </div>
+      {/* Functional Tabs */}
+      <Tabs 
+        value={state.selectedFilters.practiceTab} 
+        onValueChange={(value) => dispatch({ type: 'SET_PRACTICE_TAB', payload: value })}
+      >
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="Full Tests">Full Tests</TabsTrigger>
+          <TabsTrigger value="Subject Practice">Subject Practice</TabsTrigger>
+          <TabsTrigger value="Topic Practice">Topic Practice</TabsTrigger>
+          <TabsTrigger value="Mixed Review">Mixed Review</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="Full Tests" className="mt-6">
+          <FullTestsSection />
+        </TabsContent>
+        
+        <TabsContent value="Subject Practice" className="mt-6">
+          <SubjectPracticeSection />
+        </TabsContent>
+        
+        <TabsContent value="Topic Practice" className="mt-6">
+          <TopicPracticeSection />
+        </TabsContent>
+        
+        <TabsContent value="Mixed Review" className="mt-6">
+          <MixedReviewSection />
+        </TabsContent>
+      </Tabs>
 
-                <Button 
-                  className="w-full mt-4" 
-                  variant={test.progress > 0 ? "default" : "outline"}
-                >
-                  {test.progress > 0 ? "Continue Practice" : "Start Practice"}
-                  <ChevronRight className="h-4 w-4 ml-2" />
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* Practice Modes */}
-      <div>
-        <h2 className="text-xl font-semibold text-foreground mb-4">Practice Modes</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {practiceMode.map((mode) => (
-            <Card key={mode.title} className="hover:shadow-lg transition-shadow cursor-pointer">
-              <CardHeader className="text-center">
-                <mode.icon className={`h-12 w-12 mx-auto mb-3 ${mode.color}`} />
-                <CardTitle className="text-lg">{mode.title}</CardTitle>
-                <CardDescription>{mode.description}</CardDescription>
-              </CardHeader>
-              <CardContent className="text-center">
-                <div className="space-y-3 text-sm text-muted-foreground">
-                  <div className="flex justify-between">
-                    <span>Time:</span>
-                    <span>{mode.time}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Questions:</span>
-                    <span>{mode.questions}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Difficulty:</span>
-                    <span>{mode.difficulty}</span>
-                  </div>
-                </div>
-                
-                <Button className="w-full mt-4">
-                  <Play className="h-4 w-4 mr-2" />
-                  Start {mode.title}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* Subject Breakdown */}
-      <div>
-        <h2 className="text-xl font-semibold text-foreground mb-4">Practice by Subject</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {subjects.map((subject) => (
-            <Card key={subject.name} className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                    <subject.icon className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg">{subject.name}</CardTitle>
-                    <CardDescription>
-                      {subject.available} questions available
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>Mastery Level</span>
-                      <span>{subject.progress}%</span>
-                    </div>
-                    <Progress value={subject.progress} className="h-2" />
-                  </div>
-                  
-                  <div className="text-sm">
-                    <p className="text-muted-foreground mb-2">Topics covered:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {subject.topics.map((topic) => (
-                        <Badge key={topic} variant="outline" className="text-xs">
-                          {topic}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="text-sm text-muted-foreground">
-                    <p>Average Accuracy: <span className="font-medium text-foreground">{subject.avgAccuracy}%</span></p>
-                  </div>
-                </div>
-                
-                <Button variant="outline" className="w-full mt-4">
-                  Practice {subject.name}
-                  <ChevronRight className="h-4 w-4 ml-2" />
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* Quick Start */}
+      {/* Quick Start Recommendation */}
       <Card className="bg-gradient-to-r from-primary/5 to-primary-light/5 border-primary/20">
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
@@ -285,22 +268,45 @@ const Practice = () => {
             <div className="flex-1">
               <h4 className="font-medium text-foreground mb-2">Recommended Practice:</h4>
               <p className="text-sm text-muted-foreground mb-4">
-                SHSAT Math - Algebra topics (15 questions, ~20 minutes)
+                {state.user.selectedTest || 'SHSAT'} Math - Algebra topics (15 questions, ~20 minutes)
               </p>
-              <Button>
+              <Button
+                onClick={() => startSession({
+                  sessionType: 'topic_practice',
+                  subject: 'Math',
+                  topic: 'Algebra',
+                  questions: generateMockQuestions(15, { subject: 'Math', topic: 'Algebra' })
+                })}
+              >
                 Start Recommended Practice
                 <Play className="h-4 w-4 ml-2" />
               </Button>
             </div>
             <div className="flex-1">
               <h4 className="font-medium text-foreground mb-2">Continue Last Session:</h4>
-              <p className="text-sm text-muted-foreground mb-4">
-                SHSAT Practice Test #3 (Question 15 of 30)
-              </p>
-              <Button variant="outline">
-                Continue Session
-                <ChevronRight className="h-4 w-4 ml-2" />
-              </Button>
+              {state.practiceSession && !state.practiceSession.isCompleted ? (
+                <>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {state.practiceSession.sessionType.replace('_', ' ')} (Question {state.practiceSession.currentQuestion + 1} of {state.practiceSession.questions.length})
+                  </p>
+                  <Button 
+                    variant="outline"
+                    onClick={() => navigate(`/dashboard/practice/session/${state.practiceSession.id}`)}
+                  >
+                    Continue Session
+                    <ChevronRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    No active session found
+                  </p>
+                  <Button variant="outline" disabled>
+                    No Session to Continue
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </CardContent>

@@ -13,14 +13,16 @@ import {
   Eye,
   ArrowLeft,
   TrendingUp,
-  Award
+  Award,
+  Play
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
+import { generateMockQuestions } from "@/mock/data";
 
 const Results = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   
   const session = state.practiceSession;
 
@@ -77,6 +79,31 @@ const Results = () => {
   };
 
   const averageTimePerQuestion = Math.round(session.sessionTime / answeredQuestions) || 0;
+
+  const handleRetakePractice = () => {
+    const questions = generateMockQuestions(
+      session.questions.length,
+      {
+        subject: session.subject,
+        topic: session.topic,
+        difficulty: session.difficulty
+      }
+    );
+    
+    dispatch({
+      type: 'START_SESSION',
+      payload: {
+        testType: session.testType,
+        sessionType: session.sessionType,
+        subject: session.subject,
+        topic: session.topic,
+        difficulty: session.difficulty,
+        questions
+      }
+    });
+    
+    navigate(`/dashboard/practice/session/${Date.now()}`);
+  };
 
   // Calculate performance by topic
   const topicPerformance = session.questions.reduce((acc, question) => {
@@ -242,6 +269,15 @@ const Results = () => {
           <span>Review Wrong Answers</span>
         </Button>
         
+        <Button 
+          variant="outline"
+          onClick={handleRetakePractice}
+          className="flex items-center space-x-2"
+        >
+          <Play className="h-4 w-4" />
+          <span>Retake Practice</span>
+        </Button>
+
         <Button 
           variant="outline"
           onClick={() => navigate('/practice')}

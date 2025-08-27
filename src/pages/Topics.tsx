@@ -5,9 +5,10 @@ import { Progress } from "@/components/ui/progress";
 import { Calculator, MessageSquare, FileText, Play } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { useNavigate } from "react-router-dom";
+import { generateMockQuestions } from "@/mock/data";
 
 const Topics = () => {
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const navigate = useNavigate();
   const subjects = state.analytics.performanceBySubject;
 
@@ -76,10 +77,29 @@ const Topics = () => {
                       Avg time: {topic.averageTime}s per question
                     </div>
                     
-                    <Button className="w-full" onClick={() => navigate('/practice')}>
-                      <Play className="h-4 w-4 mr-2" />
-                      Practice {topic.topic}
-                    </Button>
+                        <Button 
+                          className="w-full"
+                          onClick={() => {
+                            const questions = generateMockQuestions(15, { 
+                              subject: subject.subject, 
+                              topic: topic.topic 
+                            });
+                            dispatch({
+                              type: 'START_SESSION',
+                              payload: {
+                                testType: state.user.selectedTest || 'SHSAT',
+                                sessionType: 'topic_practice',
+                                subject: subject.subject as 'Math' | 'Verbal' | 'Reading',
+                                topic: topic.topic,
+                                questions
+                              }
+                            });
+                            navigate(`/dashboard/practice/session/${Date.now()}`);
+                          }}
+                        >
+                          <Play className="h-4 w-4 mr-2" />
+                          Practice {topic.topic}
+                        </Button>
                   </CardContent>
                 </Card>
               ))}

@@ -50,7 +50,14 @@ export function SessionControls() {
     session.userAnswers[id]?.selectedAnswer
   ).length;
   
+  const correctCount = Object.entries(session.userAnswers)
+    .filter(([questionId, answer]) => {
+      const question = session.questions.find(q => q.id === questionId);
+      return question && answer.selectedAnswer === question.correctAnswer;
+    }).length;
+  
   const progressPercentage = (answeredCount / session.questions.length) * 100;
+  const accuracy = answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 0;
 
   return (
     <Card>
@@ -71,6 +78,16 @@ export function SessionControls() {
             </div>
             <Progress value={progressPercentage} className="h-2" />
           </div>
+
+          {answeredCount > 0 && (
+            <div className="space-y-1">
+              <div className="flex justify-between text-sm">
+                <span>Accuracy so far:</span>
+                <span>{accuracy}%</span>
+              </div>
+              <Progress value={accuracy} className="h-2" />
+            </div>
+          )}
 
           <div className="text-xs text-muted-foreground space-y-1">
             <div>Type: {session.sessionType.replace('_', ' ')}</div>
