@@ -7,7 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DifficultyBadge } from "@/components/DifficultyBadge";
 import { useApp } from "@/context/AppContext";
 import { useNavigate } from "react-router-dom";
-import { generateMockQuestions, fullTestQuestions } from "@/mock/data";
+import { generateMockQuestions } from "@/mock/data";
+import { useSupabaseQuestions } from "@/hooks/useSupabaseQuestions";
 import { 
   BookOpen, 
   Clock, 
@@ -23,16 +24,54 @@ import {
 const Practice = () => {
   const { state, dispatch } = useApp();
   const navigate = useNavigate();
+  const { fetchQuestions, loading } = useSupabaseQuestions();
 
-  const startSession = (config: any) => {
-    dispatch({
-      type: 'START_SESSION',
-      payload: {
+  const startSession = async (config: any) => {
+    try {
+      // Fetch questions from backend
+      const questions = await fetchQuestions({
         testType: state.user.selectedTest || 'SHSAT',
-        ...config
+        subject: config.subject,
+        topic: config.topic,
+        difficulty: config.difficulty,
+        count: config.sessionType === 'full_test' ? 89 : 20
+      });
+
+      if (questions.length === 0) {
+        // Fallback to mock questions if no backend questions
+        const mockQuestions = generateMockQuestions(
+          config.sessionType === 'full_test' ? 89 : 20,
+          {
+            subject: config.subject,
+            topic: config.topic,
+            difficulty: config.difficulty
+          }
+        );
+        questions.push(...mockQuestions);
       }
-    });
-    navigate(`/dashboard/practice/session/${Date.now()}`);
+
+      dispatch({
+        type: 'START_SESSION',
+        payload: {
+          testType: state.user.selectedTest || 'SHSAT',
+          questions: questions,
+          ...config
+        }
+      });
+      navigate(`/dashboard/practice/session/${Date.now()}`);
+    } catch (error) {
+      console.error('Error starting session:', error);
+      // Fallback to mock data
+      dispatch({
+        type: 'START_SESSION',
+        payload: {
+          testType: state.user.selectedTest || 'SHSAT',
+          questions: generateMockQuestions(20, {}),
+          ...config
+        }
+      });
+      navigate(`/dashboard/practice/session/${Date.now()}`);
+    }
   };
 
   const FullTestsSection = () => (
@@ -60,11 +99,12 @@ const Practice = () => {
             className="w-full"
             onClick={() => startSession({
               sessionType: 'full_test',
-              questions: fullTestQuestions
+              questions: []
             })}
+            disabled={loading}
           >
             <Play className="h-4 w-4 mr-2" />
-            Start Full Test
+            {loading ? 'Loading...' : 'Start Full Test'}
           </Button>
         </CardContent>
       </Card>
@@ -107,10 +147,11 @@ const Practice = () => {
                 onClick={() => startSession({
                   sessionType: 'subject_practice',
                   subject: subject.subject,
-                  questions: generateMockQuestions(20, { subject: subject.subject })
+                  questions: []
                 })}
+                disabled={loading}
               >
-                Practice All Topics
+                {loading ? 'Loading...' : 'Practice All Topics'}
               </Button>
             </div>
           </CardContent>
@@ -144,7 +185,7 @@ const Practice = () => {
                     sessionType: 'topic_practice',
                     subject: subject.subject,
                     topic: topic.topic,
-                    questions: generateMockQuestions(15, { subject: subject.subject, topic: topic.topic })
+                    questions: []
                   })}
                 >
                   <CardContent className="p-4 space-y-2">
@@ -201,11 +242,12 @@ const Practice = () => {
               onClick={() => startSession({
                 sessionType: 'mixed_review',
                 difficulty,
-                questions: generateMockQuestions(20, { difficulty })
+                questions: []
               })}
+              disabled={loading}
             >
-              <Play className="h-4 w-4 mr-2" />
-              Start {difficulty} Review
+            <Play className="h-4 w-4 mr-2" />
+            {loading ? 'Loading...' : `Start ${difficulty} Review`}
             </Button>
           </CardContent>
         </Card>
@@ -275,10 +317,11 @@ const Practice = () => {
                   sessionType: 'topic_practice',
                   subject: 'Math',
                   topic: 'Algebra',
-                  questions: generateMockQuestions(15, { subject: 'Math', topic: 'Algebra' })
+                  questions: []
                 })}
+                disabled={loading}
               >
-                Start Recommended Practice
+                {loading ? 'Loading...' : 'Start Recommended Practice'}
                 <Play className="h-4 w-4 ml-2" />
               </Button>
             </div>

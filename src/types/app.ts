@@ -118,4 +118,6 @@ export type AppAction =
   | { type: 'RESUME_SESSION' }
   | { type: 'TICK_TIMER' }
   | { type: 'COMPLETE_SESSION' }
-  | { type: 'SET_CURRENT_PAGE'; payload: string };
+  | { type: 'SET_CURRENT_PAGE'; payload: string }
+  | { type: 'UPDATE_ANALYTICS'; payload: AnalyticsData }
+  | { type: 'UPDATE_USER'; payload: User };

@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { AppState, AppAction, PracticeSession } from '@/types/app';
+import React, { createContext, useContext, useReducer, useEffect, useState } from 'react';
+import { AppState, AppAction, PracticeSession, User, AnalyticsData } from '@/types/app';
 import { mockUser, mockAnalytics } from '@/mock/data';
+import { supabase } from '@/integrations/supabase/client';
 
 const initialState: AppState = {
   currentPage: '/dashboard',
@@ -62,21 +63,65 @@ function appReducer(state: AppState, action: AppAction): AppState {
         isPaused: false,
         isCompleted: false
       };
+
+      // Create session in backend (fire and forget)
+      supabase.functions.invoke('create-session', {
+        body: {
+          sessionType: action.payload.sessionType,
+          testType: action.payload.testType,
+          subject: action.payload.subject,
+          topic: action.payload.topic,
+          difficulty: action.payload.difficulty,
+          questionsData: action.payload.questions
+        }
+      }).then(({ data, error }) => {
+        if (error) {
+          console.error('Error creating session:', error);
+        } else {
+          console.log('Session created in backend:', data);
+        }
+      });
+
       return { ...state, practiceSession: session };
     }
 
-    case 'ANSWER_QUESTION':
+    case 'ANSWER_QUESTION': {
       if (!state.practiceSession) return state;
+      
+      const { questionId, answer } = action.payload;
+      const currentQuestion = state.practiceSession.questions.find(q => q.id === questionId);
+      const isCorrect = currentQuestion ? answer.selectedAnswer === currentQuestion.correctAnswer : false;
+      
+      // Submit answer to backend (fire and forget)
+      if (state.practiceSession.id) {
+        supabase.functions.invoke('submit-answer', {
+          body: {
+            sessionId: state.practiceSession.id,
+            questionId: questionId,
+            userAnswer: answer.selectedAnswer,
+            timeSpent: answer.timeSpent,
+            isCorrect: isCorrect,
+            isFlagged: answer.isFlagged,
+            confidenceLevel: answer.confidence
+          }
+        }).then(({ error }) => {
+          if (error) {
+            console.error('Error submitting answer:', error);
+          }
+        });
+      }
+
       return {
         ...state,
         practiceSession: {
           ...state.practiceSession,
           userAnswers: {
             ...state.practiceSession.userAnswers,
-            [action.payload.questionId]: action.payload.answer
+            [questionId]: answer
           }
         }
       };
+    }
 
     case 'GO_TO_QUESTION':
       if (!state.practiceSession) return state;
@@ -130,7 +175,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
         }
       };
 
-    case 'COMPLETE_SESSION':
+    case 'COMPLETE_SESSION': {
       if (!state.practiceSession) return state;
       
       const answeredQuestions = Object.keys(state.practiceSession.userAnswers).length;
@@ -142,6 +187,20 @@ function appReducer(state: AppState, action: AppAction): AppState {
       
       const score = answeredQuestions > 0 ? Math.round((correctAnswers / answeredQuestions) * 100) : 0;
       
+      // Complete session in backend (fire and forget)
+      if (state.practiceSession.id) {
+        supabase.functions.invoke('complete-session', {
+          body: {
+            sessionId: state.practiceSession.id,
+            totalTimeSpent: state.practiceSession.sessionTime
+          }
+        }).then(({ error }) => {
+          if (error) {
+            console.error('Error completing session:', error);
+          }
+        });
+      }
+      
       return {
         ...state,
         practiceSession: {
@@ -150,6 +209,19 @@ function appReducer(state: AppState, action: AppAction): AppState {
           isCompleted: true,
           score
         }
+      };
+    }
+
+    case 'UPDATE_ANALYTICS':
+      return {
+        ...state,
+        analytics: action.payload
+      };
+
+    case 'UPDATE_USER':
+      return {
+        ...state,
+        user: action.payload
       };
 
     default:
@@ -164,6 +236,81 @@ const AppContext = createContext<{
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
+  const [user, setUser] = useState<any>(null);
+  const [session, setSession] = useState<any>(null);
+
+  // Initialize auth state
+  useEffect(() => {
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        // Fetch user analytics when user logs in
+        if (session?.user) {
+          setTimeout(() => {
+            fetchUserAnalytics();
+          }, 0);
+        }
+      }
+    );
+
+    // Check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        fetchUserAnalytics();
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Fetch user analytics from backend
+  const fetchUserAnalytics = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('get-analytics');
+      
+      if (error) {
+        console.error('Error fetching analytics:', error);
+        return;
+      }
+
+      if (data) {
+        dispatch({
+          type: 'UPDATE_ANALYTICS',
+          payload: {
+            overallStats: data.overallStats,
+            performanceBySubject: data.performanceBySubject,
+            scoreHistory: data.scoreHistory
+          }
+        });
+
+        // Update user profile in state
+        if (data.profile) {
+          dispatch({
+            type: 'UPDATE_USER',
+            payload: {
+              id: data.profile.id,
+              firstName: data.profile.first_name || 'User',
+              lastName: data.profile.last_name || '',
+              email: user?.email || '',
+              subscriptionTier: data.profile.subscription_tier || 'free',
+              selectedTest: data.profile.selected_test || 'SHSAT',
+              studyStreak: data.profile.study_streak || 0,
+              totalStudyTime: data.profile.total_study_time || 0,
+              createdAt: new Date(data.profile.created_at)
+            }
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch analytics:', error);
+    }
+  };
 
   // Auto-save to localStorage
   useEffect(() => {
@@ -184,7 +331,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [state.practiceSession?.isPaused, state.practiceSession?.isCompleted]);
 
   return (
-    <AppContext.Provider value={{ state, dispatch }}>
+    <AppContext.Provider value={{ 
+      state: { 
+        ...state, 
+        user: user ? { ...state.user, email: user.email } : state.user 
+      }, 
+      dispatch 
+    }}>
       {children}
     </AppContext.Provider>
   );

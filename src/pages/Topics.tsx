@@ -6,10 +6,12 @@ import { Calculator, MessageSquare, FileText, Play } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { useNavigate } from "react-router-dom";
 import { generateMockQuestions } from "@/mock/data";
+import { useSupabaseQuestions } from "@/hooks/useSupabaseQuestions";
 
 const Topics = () => {
   const { state, dispatch } = useApp();
   const navigate = useNavigate();
+  const { fetchQuestions } = useSupabaseQuestions();
   const subjects = state.analytics.performanceBySubject;
 
   const getMasteryColor = (mastery: string) => {
@@ -79,22 +81,54 @@ const Topics = () => {
                     
                         <Button 
                           className="w-full"
-                          onClick={() => {
-                            const questions = generateMockQuestions(15, { 
-                              subject: subject.subject, 
-                              topic: topic.topic 
-                            });
-                            dispatch({
-                              type: 'START_SESSION',
-                              payload: {
+                          onClick={async () => {
+                            try {
+                              const questions = await fetchQuestions({
                                 testType: state.user.selectedTest || 'SHSAT',
-                                sessionType: 'topic_practice',
-                                subject: subject.subject as 'Math' | 'Verbal' | 'Reading',
+                                subject: subject.subject,
                                 topic: topic.topic,
-                                questions
+                                count: 15
+                              });
+
+                              if (questions.length === 0) {
+                                // Fallback to mock questions
+                                const mockQuestions = generateMockQuestions(15, { 
+                                  subject: subject.subject, 
+                                  topic: topic.topic 
+                                });
+                                questions.push(...mockQuestions);
                               }
-                            });
-                            navigate(`/dashboard/practice/session/${Date.now()}`);
+
+                              dispatch({
+                                type: 'START_SESSION',
+                                payload: {
+                                  testType: state.user.selectedTest || 'SHSAT',
+                                  sessionType: 'topic_practice',
+                                  subject: subject.subject as 'Math' | 'Verbal' | 'Reading',
+                                  topic: topic.topic,
+                                  questions
+                                }
+                              });
+                              navigate(`/dashboard/practice/session/${Date.now()}`);
+                            } catch (error) {
+                              console.error('Error starting topic practice:', error);
+                              // Fallback to mock questions
+                              const questions = generateMockQuestions(15, { 
+                                subject: subject.subject, 
+                                topic: topic.topic 
+                              });
+                              dispatch({
+                                type: 'START_SESSION',
+                                payload: {
+                                  testType: state.user.selectedTest || 'SHSAT',
+                                  sessionType: 'topic_practice',
+                                  subject: subject.subject as 'Math' | 'Verbal' | 'Reading',
+                                  topic: topic.topic,
+                                  questions
+                                }
+                              });
+                              navigate(`/dashboard/practice/session/${Date.now()}`);
+                            }
                           }}
                         >
                           <Play className="h-4 w-4 mr-2" />
