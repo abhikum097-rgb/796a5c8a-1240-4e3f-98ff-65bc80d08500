@@ -194,6 +194,15 @@ const AppContext = createContext<{
   dispatch: React.Dispatch<AppAction>;
 } | null>(null);
 
+// Type guards for proper type checking
+const isValidSubscriptionTier = (tier: string): tier is 'free' | 'single_test' | 'all_access' => {
+  return ['free', 'single_test', 'all_access'].includes(tier);
+};
+
+const isValidTestType = (test: string): test is 'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS' => {
+  return ['SHSAT', 'SSAT', 'ISEE', 'HSPT', 'TACHS'].includes(test);
+};
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const [user, setUser] = useState<SupabaseUser | null>(null);
@@ -251,19 +260,70 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       if (profileError && profileError.code !== 'PGRST116') {
         console.error('Error fetching profile:', profileError);
+        toast({
+          title: "Profile Error",
+          description: "Failed to load user profile data.",
+          variant: "destructive",
+        });
       }
 
-      // Update user in app state
+      // Create user profile if it doesn't exist
+      if (!profile) {
+        console.log('Creating new user profile for:', supabaseUser.id);
+        const { data: newProfile, error: createError } = await supabase
+          .from('user_profiles')
+          .insert({
+            id: supabaseUser.id,
+            first_name: supabaseUser.user_metadata?.first_name || 'User',
+            last_name: supabaseUser.user_metadata?.last_name || '',
+            subscription_tier: 'free',
+            selected_test: 'SHSAT',
+            study_streak: 0,
+            total_study_time: 0
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Error creating profile:', createError);
+          toast({
+            title: "Profile Creation Error",
+            description: "Failed to create user profile.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Use the newly created profile
+        const profileData = newProfile;
+      }
+
+      // Use existing or newly created profile data
+      const profileData = profile || {
+        first_name: 'User',
+        last_name: '',
+        subscription_tier: 'free',
+        selected_test: 'SHSAT',
+        study_streak: 0,
+        total_study_time: 0,
+        created_at: new Date().toISOString()
+      };
+
+      // Update user in app state with proper type checking
       const appUser: User = {
         id: supabaseUser.id,
-        firstName: profile?.first_name || 'User',
-        lastName: profile?.last_name || '',
+        firstName: profileData.first_name || 'User',
+        lastName: profileData.last_name || '',
         email: supabaseUser.email || '',
-        subscriptionTier: profile?.subscription_tier || 'free',
-        selectedTest: profile?.selected_test || 'SHSAT',
-        studyStreak: profile?.study_streak || 0,
-        totalStudyTime: profile?.total_study_time || 0,
-        createdAt: new Date(profile?.created_at || supabaseUser.created_at)
+        subscriptionTier: isValidSubscriptionTier(profileData.subscription_tier) 
+          ? profileData.subscription_tier 
+          : 'free',
+        selectedTest: isValidTestType(profileData.selected_test) 
+          ? profileData.selected_test 
+          : 'SHSAT',
+        studyStreak: profileData.study_streak || 0,
+        totalStudyTime: profileData.total_study_time || 0,
+        createdAt: new Date(profileData.created_at || supabaseUser.created_at)
       };
 
       dispatch({
@@ -275,6 +335,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       fetchUserAnalytics();
     } catch (error) {
       console.error('Failed to fetch user data:', error);
+      toast({
+        title: "Data Error",
+        description: "Failed to load user information.",
+        variant: "destructive",
+      });
     }
   };
 
