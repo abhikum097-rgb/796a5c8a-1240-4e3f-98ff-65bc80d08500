@@ -29,6 +29,18 @@ const Practice = () => {
   const { fetchQuestions, loading } = useSupabaseQuestions();
   const { toast } = useToast();
 
+  // Add null check for state.user
+  if (!state.user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading user data...</p>
+        </div>
+      </div>
+    );
+  }
+
   const startSession = async (config: any) => {
     // Check if user is authenticated
     const { data: { session } } = await supabase.auth.getSession();
@@ -46,7 +58,7 @@ const Practice = () => {
     try {
       // Fetch questions from backend
       const questions = await fetchQuestions({
-        testType: state.user.selectedTest || 'SHSAT',
+        testType: state.user?.selectedTest || 'SHSAT',
         subject: config.subject,
         topic: config.topic,
         difficulty: config.difficulty,
@@ -79,7 +91,7 @@ const Practice = () => {
       dispatch({
         type: 'START_SESSION',
         payload: {
-          testType: state.user.selectedTest || 'SHSAT',
+          testType: state.user?.selectedTest || 'SHSAT',
           questions: questions,
           ...config
         }
@@ -99,7 +111,7 @@ const Practice = () => {
         dispatch({
           type: 'START_SESSION',
           payload: {
-            testType: state.user.selectedTest || 'SHSAT',
+            testType: state.user?.selectedTest || 'SHSAT',
             questions: generateMockQuestions(20, {}),
             ...config
           }
@@ -114,7 +126,7 @@ const Practice = () => {
       <Card className="hover:shadow-md transition-all duration-200">
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            <span>{state.user.selectedTest || 'SHSAT'}</span>
+            <span>{state.user?.selectedTest || 'SHSAT'}</span>
             <Badge variant="outline">Full Test</Badge>
           </CardTitle>
           <CardDescription>Complete exam simulation</CardDescription>
@@ -345,7 +357,7 @@ const Practice = () => {
             <div className="flex-1">
               <h4 className="font-medium text-foreground mb-2">Recommended Practice:</h4>
               <p className="text-sm text-muted-foreground mb-4">
-                {state.user.selectedTest || 'SHSAT'} Math - Algebra topics (15 questions, ~20 minutes)
+                {state.user?.selectedTest || 'SHSAT'} Math - Algebra topics (15 questions, ~20 minutes)
               </p>
               <Button
                 onClick={() => startSession({
