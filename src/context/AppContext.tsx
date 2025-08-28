@@ -1,14 +1,24 @@
+
 import React, { createContext, useContext, useReducer, useEffect, useState } from 'react';
 import { AppState, AppAction, PracticeSession, User, AnalyticsData } from '@/types/app';
-import { mockUser, mockAnalytics } from '@/mock/data';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from "@/hooks/use-toast";
+import type { User as SupabaseUser, Session } from '@supabase/supabase-js';
 
 const initialState: AppState = {
   currentPage: '/dashboard',
-  user: mockUser,
+  user: null,
   practiceSession: null,
-  analytics: mockAnalytics,
+  analytics: {
+    overallStats: {
+      totalQuestions: 0,
+      averageScore: 0,
+      studyStreak: 0,
+      timeSpentThisWeek: 0
+    },
+    performanceBySubject: [],
+    scoreHistory: []
+  },
   selectedFilters: {
     practiceTab: 'Full Tests',
     subject: '',
@@ -65,24 +75,6 @@ function appReducer(state: AppState, action: AppAction): AppState {
         isCompleted: false
       };
 
-      // Create session in backend (fire and forget)
-      supabase.functions.invoke('create-session', {
-        body: {
-          sessionType: action.payload.sessionType,
-          testType: action.payload.testType,
-          subject: action.payload.subject,
-          topic: action.payload.topic,
-          difficulty: action.payload.difficulty,
-          questionsData: action.payload.questions
-        }
-      }).then(({ data, error }) => {
-        if (error) {
-          console.error('Error creating session:', error);
-        } else {
-          console.log('Session created in backend:', data);
-        }
-      });
-
       return { ...state, practiceSession: session };
     }
 
@@ -93,25 +85,6 @@ function appReducer(state: AppState, action: AppAction): AppState {
       const currentQuestion = state.practiceSession.questions.find(q => q.id === questionId);
       const isCorrect = currentQuestion ? answer.selectedAnswer === currentQuestion.correctAnswer : false;
       
-      // Submit answer to backend (fire and forget)
-      if (state.practiceSession.id) {
-        supabase.functions.invoke('submit-answer', {
-          body: {
-            sessionId: state.practiceSession.id,
-            questionId: questionId,
-            userAnswer: answer.selectedAnswer,
-            timeSpent: answer.timeSpent,
-            isCorrect: isCorrect,
-            isFlagged: answer.isFlagged,
-            confidenceLevel: answer.confidence
-          }
-        }).then(({ error }) => {
-          if (error) {
-            console.error('Error submitting answer:', error);
-          }
-        });
-      }
-
       return {
         ...state,
         practiceSession: {
@@ -188,20 +161,6 @@ function appReducer(state: AppState, action: AppAction): AppState {
       
       const score = answeredQuestions > 0 ? Math.round((correctAnswers / answeredQuestions) * 100) : 0;
       
-      // Complete session in backend (fire and forget)
-      if (state.practiceSession.id) {
-        supabase.functions.invoke('complete-session', {
-          body: {
-            sessionId: state.practiceSession.id,
-            totalTimeSpent: state.practiceSession.sessionTime
-          }
-        }).then(({ error }) => {
-          if (error) {
-            console.error('Error completing session:', error);
-          }
-        });
-      }
-      
       return {
         ...state,
         practiceSession: {
@@ -237,51 +196,95 @@ const AppContext = createContext<{
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
-  const [user, setUser] = useState<any>(null);
-  const [session, setSession] = useState<any>(null);
+  const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // Initialize auth state
   useEffect(() => {
-    // Set up auth state listener
+    // Set up auth state listener first
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.id);
         setSession(session);
         setUser(session?.user ?? null);
         
-        // Fetch user analytics when user logs in
+        // Update user in app state when authenticated
         if (session?.user) {
           setTimeout(() => {
-            fetchUserAnalytics();
+            fetchUserData(session.user);
           }, 0);
+        } else {
+          // Clear user data when logged out
+          dispatch({
+            type: 'UPDATE_USER',
+            payload: null
+          });
         }
       }
     );
 
     // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('Initial session check:', session?.user?.id);
       setSession(session);
       setUser(session?.user ?? null);
       
       if (session?.user) {
-        fetchUserAnalytics();
+        fetchUserData(session.user);
       }
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch user analytics from backend with error handling
+  // Fetch user profile and analytics
+  const fetchUserData = async (supabaseUser: SupabaseUser) => {
+    try {
+      // Fetch user profile
+      const { data: profile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', supabaseUser.id)
+        .single();
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        console.error('Error fetching profile:', profileError);
+      }
+
+      // Update user in app state
+      const appUser: User = {
+        id: supabaseUser.id,
+        firstName: profile?.first_name || 'User',
+        lastName: profile?.last_name || '',
+        email: supabaseUser.email || '',
+        subscriptionTier: profile?.subscription_tier || 'free',
+        selectedTest: profile?.selected_test || 'SHSAT',
+        studyStreak: profile?.study_streak || 0,
+        totalStudyTime: profile?.total_study_time || 0,
+        createdAt: new Date(profile?.created_at || supabaseUser.created_at)
+      };
+
+      dispatch({
+        type: 'UPDATE_USER',
+        payload: appUser
+      });
+
+      // Fetch analytics
+      fetchUserAnalytics();
+    } catch (error) {
+      console.error('Failed to fetch user data:', error);
+    }
+  };
+
+  // Fetch user analytics from backend
   const fetchUserAnalytics = async () => {
     try {
       const { data, error } = await supabase.functions.invoke('get-analytics');
       
       if (error) {
         console.error('Error fetching analytics:', error);
-        toast({
-          title: "Analytics Error",
-          description: "Unable to load your analytics data. Please try refreshing the page.",
-          variant: "destructive",
-        });
         return;
       }
 
@@ -289,48 +292,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         dispatch({
           type: 'UPDATE_ANALYTICS',
           payload: {
-            overallStats: data.overallStats,
-            performanceBySubject: data.performanceBySubject,
-            scoreHistory: data.scoreHistory
+            overallStats: data.overallStats || initialState.analytics.overallStats,
+            performanceBySubject: data.performanceBySubject || [],
+            scoreHistory: data.scoreHistory || []
           }
         });
-
-        // Update user profile in state
-        if (data.profile) {
-          dispatch({
-            type: 'UPDATE_USER',
-            payload: {
-              id: data.profile.id,
-              firstName: data.profile.first_name || 'User',
-              lastName: data.profile.last_name || '',
-              email: user?.email || '',
-              subscriptionTier: data.profile.subscription_tier || 'free',
-              selectedTest: data.profile.selected_test || 'SHSAT',
-              studyStreak: data.profile.study_streak || 0,
-              totalStudyTime: data.profile.total_study_time || 0,
-              createdAt: new Date(data.profile.created_at)
-            }
-          });
-        }
       }
     } catch (error) {
       console.error('Failed to fetch analytics:', error);
-      toast({
-        title: "Connection Error",
-        description: "Unable to connect to the server. Please check your internet connection.",
-        variant: "destructive",
-      });
     }
   };
 
-  // Auto-save to localStorage
+  // Auto-save practice session to localStorage
   useEffect(() => {
-    if (state.practiceSession) {
+    if (state.practiceSession && !state.practiceSession.isCompleted) {
       localStorage.setItem('practiceSession', JSON.stringify(state.practiceSession));
+    } else {
+      localStorage.removeItem('practiceSession');
     }
   }, [state.practiceSession]);
 
-  // Timer effect
+  // Timer effect for practice sessions
   useEffect(() => {
     if (state.practiceSession && !state.practiceSession.isPaused && !state.practiceSession.isCompleted) {
       const timer = setInterval(() => {
@@ -341,14 +323,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.practiceSession?.isPaused, state.practiceSession?.isCompleted]);
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <AppContext.Provider value={{ 
-      state: { 
-        ...state, 
-        user: user ? { ...state.user, email: user.email } : state.user 
-      }, 
-      dispatch 
-    }}>
+    <AppContext.Provider value={{ state, dispatch }}>
       {children}
     </AppContext.Provider>
   );

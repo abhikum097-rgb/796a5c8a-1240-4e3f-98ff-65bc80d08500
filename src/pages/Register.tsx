@@ -48,9 +48,10 @@ const Register = () => {
         email: email.trim(),
         password: password,
         options: {
+          emailRedirectTo: `${window.location.origin}/dashboard`,
           data: {
             first_name: firstName.trim(),
-            last_name: lastName.trim(),
+            last_name: lastName.trim()
           }
         }
       });
@@ -65,19 +66,29 @@ const Register = () => {
           description: "Please check your email to verify your account.",
         });
         
-        // If email confirmation is disabled, redirect to dashboard
+        // If user is automatically confirmed, redirect to dashboard
         if (data.session) {
           navigate('/dashboard');
         } else {
           // Otherwise, redirect to login with a message
-          navigate('/login');
+          navigate('/login?message=Please check your email to verify your account');
         }
       }
     } catch (error: any) {
       console.error('Registration error:', error);
+      let errorMessage = "An error occurred during registration. Please try again.";
+      
+      if (error.message.includes('already registered')) {
+        errorMessage = "This email is already registered. Please try logging in instead.";
+      } else if (error.message.includes('email')) {
+        errorMessage = "Please enter a valid email address.";
+      } else if (error.message.includes('password')) {
+        errorMessage = "Password requirements not met. Please use at least 6 characters.";
+      }
+      
       toast({
         title: "Registration Failed",
-        description: error.message || "Please try again with different details.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -91,7 +102,7 @@ const Register = () => {
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
           <CardDescription>
-            Join thousands of students preparing for their tests
+            Sign up to start your test preparation journey
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -188,6 +199,7 @@ const Register = () => {
                   className="pl-10 pr-10"
                   required
                   disabled={loading}
+                  minLength={6}
                 />
                 <button
                   type="button"
@@ -203,7 +215,7 @@ const Register = () => {
             <Button 
               type="submit" 
               className="w-full"
-              disabled={loading || !email || !password || !firstName || !lastName || password !== confirmPassword}
+              disabled={loading || !firstName || !lastName || !email || !password || !confirmPassword}
             >
               {loading ? 'Creating Account...' : 'Create Account'}
             </Button>
