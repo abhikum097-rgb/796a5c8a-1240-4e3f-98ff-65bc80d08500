@@ -9,6 +9,8 @@ import { useApp } from "@/context/AppContext";
 import { useNavigate } from "react-router-dom";
 import { generateMockQuestions } from "@/mock/data";
 import { useSupabaseQuestions } from "@/hooks/useSupabaseQuestions";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from '@/integrations/supabase/client';
 import { 
   BookOpen, 
   Clock, 
@@ -25,8 +27,22 @@ const Practice = () => {
   const { state, dispatch } = useApp();
   const navigate = useNavigate();
   const { fetchQuestions, loading } = useSupabaseQuestions();
+  const { toast } = useToast();
 
   const startSession = async (config: any) => {
+    // Check if user is authenticated
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to start a practice session.",
+        variant: "destructive",
+      });
+      navigate('/login');
+      return;
+    }
+
     try {
       // Fetch questions from backend
       const questions = await fetchQuestions({
@@ -71,16 +87,25 @@ const Practice = () => {
       navigate(`/dashboard/practice/session/${Date.now()}`);
     } catch (error) {
       console.error('Error starting session:', error);
-      // Fallback to mock data
-      dispatch({
-        type: 'START_SESSION',
-        payload: {
-          testType: state.user.selectedTest || 'SHSAT',
-          questions: generateMockQuestions(20, {}),
-          ...config
-        }
+      toast({
+        title: "Session Start Failed",
+        description: error instanceof Error ? error.message : "Unable to start practice session. Please try again.",
+        variant: "destructive",
       });
-      navigate(`/dashboard/practice/session/${Date.now()}`);
+      
+      // Fallback to mock data only if user is authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        dispatch({
+          type: 'START_SESSION',
+          payload: {
+            testType: state.user.selectedTest || 'SHSAT',
+            questions: generateMockQuestions(20, {}),
+            ...config
+          }
+        });
+        navigate(`/dashboard/practice/session/${Date.now()}`);
+      }
     }
   };
 

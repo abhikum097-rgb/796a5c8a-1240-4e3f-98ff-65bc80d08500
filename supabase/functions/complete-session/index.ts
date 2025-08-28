@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
@@ -30,7 +31,7 @@ serve(async (req) => {
     const body = await req.json();
     const { sessionId, totalTimeSpent } = body;
 
-    console.log('Completing session:', sessionId);
+    console.log('Completing session:', sessionId, 'for user:', user.id);
 
     // Verify session belongs to user
     const { data: session, error: sessionError } = await supabase
@@ -107,20 +108,31 @@ serve(async (req) => {
       console.error('Analytics update failed:', analyticsErr);
     }
 
-    // Update user profile study time and streak
+    // Update user profile study time and streak properly
     try {
       const studyTimeMinutes = Math.round((totalTimeSpent || 0) / 60);
       
-      const { error: profileError } = await supabase
+      // Get current profile values first
+      const { data: currentProfile } = await supabase
         .from('user_profiles')
-        .update({
-          total_study_time: supabase.raw(`total_study_time + ${studyTimeMinutes}`),
-          study_streak: supabase.raw(`study_streak + 1`)
-        })
-        .eq('id', user.id);
+        .select('total_study_time, study_streak')
+        .eq('id', user.id)
+        .single();
 
-      if (profileError) {
-        console.error('Error updating profile:', profileError);
+      if (currentProfile) {
+        const { error: profileError } = await supabase
+          .from('user_profiles')
+          .update({
+            total_study_time: (currentProfile.total_study_time || 0) + studyTimeMinutes,
+            study_streak: (currentProfile.study_streak || 0) + 1
+          })
+          .eq('id', user.id);
+
+        if (profileError) {
+          console.error('Error updating profile:', profileError);
+        } else {
+          console.log('Profile updated successfully');
+        }
       }
     } catch (profileErr) {
       console.error('Profile update failed:', profileErr);

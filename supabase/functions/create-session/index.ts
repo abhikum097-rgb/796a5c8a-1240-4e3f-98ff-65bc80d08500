@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
@@ -40,33 +41,37 @@ serve(async (req) => {
     console.log('Creating session for user:', user.id);
     console.log('Session params:', { sessionType, testType, subject, topic, difficulty });
 
-    // Get questions if not provided
+    // Get questions if not provided - use secure function invocation
     let questions = questionsData;
     if (!questions || questions.length === 0) {
-      const questionsUrl = new URL(`${Deno.env.get('SUPABASE_URL')}/functions/v1/get-questions`);
-      questionsUrl.searchParams.set('count', '20');
-      questionsUrl.searchParams.set('testType', testType);
-      if (subject) questionsUrl.searchParams.set('subject', subject);
-      if (topic) questionsUrl.searchParams.set('topic', topic);
-      if (difficulty) questionsUrl.searchParams.set('difficulty', difficulty);
-
-      const questionsResponse = await fetch(questionsUrl.toString(), {
-        headers: {
-          'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+      console.log('Fetching questions via function invocation');
+      
+      const { data: questionsResult, error: questionsError } = await supabase.functions.invoke('get-questions', {
+        body: {
+          count: sessionType === 'full_test' ? 89 : 20,
+          testType,
+          subject,
+          topic,
+          difficulty
         },
+        headers: {
+          Authorization: authHeader
+        }
       });
 
-      if (!questionsResponse.ok) {
+      if (questionsError) {
+        console.error('Error fetching questions:', questionsError);
         throw new Error('Failed to fetch questions');
       }
 
-      const questionsResult = await questionsResponse.json();
-      questions = questionsResult.questions;
+      questions = questionsResult?.questions || [];
     }
 
     if (!questions || questions.length === 0) {
       throw new Error('No questions available for the specified criteria');
     }
+
+    console.log(`Got ${questions.length} questions for session`);
 
     // Create practice session
     const { data: session, error: sessionError } = await supabase

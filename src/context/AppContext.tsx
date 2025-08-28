@@ -2,6 +2,7 @@ import React, { createContext, useContext, useReducer, useEffect, useState } fro
 import { AppState, AppAction, PracticeSession, User, AnalyticsData } from '@/types/app';
 import { mockUser, mockAnalytics } from '@/mock/data';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from "@/hooks/use-toast";
 
 const initialState: AppState = {
   currentPage: '/dashboard',
@@ -269,13 +270,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch user analytics from backend
+  // Fetch user analytics from backend with error handling
   const fetchUserAnalytics = async () => {
     try {
       const { data, error } = await supabase.functions.invoke('get-analytics');
       
       if (error) {
         console.error('Error fetching analytics:', error);
+        toast({
+          title: "Analytics Error",
+          description: "Unable to load your analytics data. Please try refreshing the page.",
+          variant: "destructive",
+        });
         return;
       }
 
@@ -309,6 +315,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('Failed to fetch analytics:', error);
+      toast({
+        title: "Connection Error",
+        description: "Unable to connect to the server. Please check your internet connection.",
+        variant: "destructive",
+      });
     }
   };
 

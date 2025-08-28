@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
@@ -13,10 +14,29 @@ serve(async (req) => {
   }
 
   try {
+    // Create Supabase client with user's auth token
+    const authHeader = req.headers.get('Authorization')!;
+    if (!authHeader) {
+      throw new Error('Authorization header required');
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        global: {
+          headers: { Authorization: authHeader }
+        }
+      }
     );
+
+    // Verify user is authenticated
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      throw new Error('User not authenticated');
+    }
 
     const body = await req.json();
     const count = parseInt(body.count || '20');
@@ -25,9 +45,10 @@ serve(async (req) => {
     const topic = body.topic;
     const difficulty = body.difficulty;
 
-    console.log('Fetching questions with params:', { count, testType, subject, topic, difficulty });
+    console.log('Fetching questions for authenticated user:', user.id);
+    console.log('Query params:', { count, testType, subject, topic, difficulty });
 
-    // Build query
+    // Build query - RLS will now enforce user authentication
     let query = supabase
       .from('questions')
       .select('*')
@@ -53,7 +74,7 @@ serve(async (req) => {
       throw error;
     }
 
-    console.log(`Found ${questions?.length || 0} questions`);
+    console.log(`Found ${questions?.length || 0} questions for user ${user.id}`);
 
     // If we don't have enough questions matching the criteria, get random questions
     if (!questions || questions.length < count) {
