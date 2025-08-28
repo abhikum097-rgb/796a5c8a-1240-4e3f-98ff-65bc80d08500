@@ -19,23 +19,34 @@ export const useSupabaseQuestions = () => {
     setError(null);
 
     try {
-      const params = new URLSearchParams();
-      
-      if (filters.count) params.set('count', filters.count.toString());
-      if (filters.testType) params.set('testType', filters.testType);
-      if (filters.subject) params.set('subject', filters.subject);
-      if (filters.topic) params.set('topic', filters.topic);
-      if (filters.difficulty) params.set('difficulty', filters.difficulty);
-
       const { data, error } = await supabase.functions.invoke('get-questions', {
-        body: Object.fromEntries(params)
+        body: filters
       });
 
       if (error) {
         throw new Error(error.message || 'Failed to fetch questions');
       }
 
-      return data?.questions || [];
+      // Map snake_case database columns to camelCase Question type
+      const questions = (data?.questions || []).map((dbQuestion: any): Question => ({
+        id: dbQuestion.id,
+        testType: dbQuestion.test_type,
+        subject: dbQuestion.subject,
+        topic: dbQuestion.topic,
+        difficulty: dbQuestion.difficulty_level,
+        questionText: dbQuestion.question_text,
+        options: {
+          A: dbQuestion.option_a,
+          B: dbQuestion.option_b,
+          C: dbQuestion.option_c,
+          D: dbQuestion.option_d
+        },
+        correctAnswer: dbQuestion.correct_answer,
+        explanation: dbQuestion.explanation,
+        timeAllocated: dbQuestion.time_allocated || 60
+      }));
+
+      return questions;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
       setError(errorMessage);

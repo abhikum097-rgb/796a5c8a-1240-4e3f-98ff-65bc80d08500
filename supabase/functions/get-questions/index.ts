@@ -18,12 +18,12 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     );
 
-    const { searchParams } = new URL(req.url);
-    const count = parseInt(searchParams.get('count') || '20');
-    const testType = searchParams.get('testType') || 'SHSAT';
-    const subject = searchParams.get('subject');
-    const topic = searchParams.get('topic');
-    const difficulty = searchParams.get('difficulty');
+    const body = await req.json();
+    const count = parseInt(body.count || '20');
+    const testType = body.testType || 'SHSAT';
+    const subject = body.subject;
+    const topic = body.topic;
+    const difficulty = body.difficulty;
 
     console.log('Fetching questions with params:', { count, testType, subject, topic, difficulty });
 

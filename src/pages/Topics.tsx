@@ -90,12 +90,21 @@ const Topics = () => {
                                 count: 15
                               });
 
+                              // Handle limited question data
+                              const targetCount = 15;
                               if (questions.length === 0) {
-                                // Fallback to mock questions
-                                const mockQuestions = generateMockQuestions(15, { 
+                                console.warn('No questions found from backend, using mock data');
+                                const mockQuestions = generateMockQuestions(targetCount, { 
                                   subject: subject.subject, 
                                   topic: topic.topic 
                                 });
+                                questions.push(...mockQuestions);
+                              } else if (questions.length < targetCount) {
+                                console.warn(`Only ${questions.length} questions found for ${topic.topic}, supplementing with mock data`);
+                                const mockQuestions = generateMockQuestions(
+                                  targetCount - questions.length,
+                                  { subject: subject.subject, topic: topic.topic }
+                                );
                                 questions.push(...mockQuestions);
                               }
 

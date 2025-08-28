@@ -37,10 +37,20 @@ const Practice = () => {
         count: config.sessionType === 'full_test' ? 89 : 20
       });
 
+      // Handle limited question data
+      const targetCount = config.sessionType === 'full_test' ? 89 : 20;
       if (questions.length === 0) {
-        // Fallback to mock questions if no backend questions
+        console.warn('No questions found from backend, using mock data');
+        const mockQuestions = generateMockQuestions(targetCount, {
+          subject: config.subject,
+          topic: config.topic,
+          difficulty: config.difficulty
+        });
+        questions.push(...mockQuestions);
+      } else if (questions.length < targetCount) {
+        console.warn(`Only ${questions.length} questions found, supplementing with mock data`);
         const mockQuestions = generateMockQuestions(
-          config.sessionType === 'full_test' ? 89 : 20,
+          targetCount - questions.length,
           {
             subject: config.subject,
             topic: config.topic,
