@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -341,10 +340,10 @@ const Practice = () => {
                 <div className="flex items-center space-x-3">
                   <Badge variant="outline">{subject.subject}</Badge>
                   <span className="text-sm text-muted-foreground">
-                    {subject.averageScore}% accuracy
+                    {subject.accuracy}% accuracy
                   </span>
                 </div>
-                <Progress value={subject.averageScore} className="w-32 h-2" />
+                <Progress value={subject.accuracy} className="w-32 h-2" />
               </div>
             ))}
           </div>
