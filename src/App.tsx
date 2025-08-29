@@ -1,3 +1,4 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -16,6 +17,7 @@ import Topics from "./pages/Topics";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
 import Billing from "./pages/Billing";
+import QuestionsAdmin from "./pages/QuestionsAdmin";
 import DashboardLayout from "./components/DashboardLayout";
 import NotFound from "./pages/NotFound";
 
@@ -61,6 +63,10 @@ const App = () => (
             
             <Route path="/analytics" element={<DashboardLayout />}>
               <Route index element={<Analytics />} />
+            </Route>
+
+            <Route path="/questions-making" element={<DashboardLayout />}>
+              <Route index element={<QuestionsAdmin />} />
             </Route>
             
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
