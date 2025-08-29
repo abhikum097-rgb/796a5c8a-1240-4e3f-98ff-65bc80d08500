@@ -15,15 +15,15 @@ const Practice = () => {
   const { state, dispatch } = useApp();
   const navigate = useNavigate();
   const { fetchQuestions, loading } = useSupabaseQuestions();
-  const [selectedTestType, setSelectedTestType] = useState(state.user.selectedTest || 'SHSAT');
+  const [selectedTestType, setSelectedTestType] = useState<'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS'>(state.user?.selectedTest || 'SHSAT');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('');
 
-  const testTypes = ['SHSAT', 'SSAT', 'ISEE', 'HSPT', 'TACHS'];
-  const subjects = ['Math', 'Verbal', 'Reading', 'Writing'];
+  const testTypes: ('SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS')[] = ['SHSAT', 'SSAT', 'ISEE', 'HSPT', 'TACHS'];
+  const subjects = ['Math', 'Verbal', 'Reading'];
   const difficulties = ['Easy', 'Medium', 'Hard'];
 
-  const startPracticeSession = async (sessionType: string, questionCount: number) => {
+  const startPracticeSession = async (sessionType: 'full_test' | 'subject_practice' | 'topic_practice' | 'mixed_review', questionCount: number) => {
     try {
       const filters: any = {
         testType: selectedTestType,
@@ -58,7 +58,7 @@ const Practice = () => {
         payload: {
           testType: selectedTestType,
           sessionType,
-          subject: selectedSubject as 'Math' | 'Verbal' | 'Reading' | 'Writing' || 'Math',
+          subject: selectedSubject as 'Math' | 'Verbal' | 'Reading' || 'Math',
           topic: 'General Practice',
           questions: finalQuestions
         }
@@ -77,7 +77,7 @@ const Practice = () => {
         payload: {
           testType: selectedTestType,
           sessionType,
-          subject: selectedSubject as 'Math' | 'Verbal' | 'Reading' | 'Writing' || 'Math',
+          subject: selectedSubject as 'Math' | 'Verbal' | 'Reading' || 'Math',
           topic: 'General Practice',
           questions: mockQuestions
         }
@@ -107,7 +107,7 @@ const Practice = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="text-sm font-medium mb-2 block">Test Type</label>
-              <Select value={selectedTestType} onValueChange={setSelectedTestType}>
+              <Select value={selectedTestType} onValueChange={(value) => setSelectedTestType(value as 'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS')}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -174,7 +174,7 @@ const Practice = () => {
             </div>
             <Button 
               className="w-full" 
-              onClick={() => startPracticeSession('quick_practice', 15)}
+              onClick={() => startPracticeSession('mixed_review', 15)}
               disabled={loading}
             >
               {loading ? 'Loading...' : 'Start Quick Practice'}
@@ -250,11 +250,11 @@ const Practice = () => {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary">{state.analytics.overallStats.accuracy}%</div>
-              <div className="text-sm text-muted-foreground">Overall Accuracy</div>
+              <div className="text-2xl font-bold text-primary">{state.analytics.overallStats.averageScore}%</div>
+              <div className="text-sm text-muted-foreground">Average Score</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary">{state.analytics.overallStats.questionsAnswered}</div>
+              <div className="text-2xl font-bold text-primary">{state.analytics.overallStats.totalQuestions}</div>
               <div className="text-sm text-muted-foreground">Questions Answered</div>
             </div>
             <div className="text-center">
