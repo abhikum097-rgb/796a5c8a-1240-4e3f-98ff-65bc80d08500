@@ -17,6 +17,7 @@ import { useApp } from "@/context/AppContext";
 import { QuestionNavigator } from "@/components/QuestionNavigator";
 import { SessionControls } from "@/components/SessionControls";
 import { DifficultyBadge } from "@/components/DifficultyBadge";
+import { useSupabaseQuestions } from "@/hooks/useSupabaseQuestions";
 import { generateMockQuestions } from "@/mock/data";
 import {
   AlertDialog,
@@ -33,28 +34,72 @@ const PracticeInterface = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const { state, dispatch } = useApp();
+  const { fetchQuestions, loading: questionsLoading } = useSupabaseQuestions();
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [showPauseOverlay, setShowPauseOverlay] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   const session = state.practiceSession;
 
   // Initialize session if not exists
   useEffect(() => {
-    if (!session && sessionId) {
-      // Create a mock session for demo purposes
-      const mockQuestions = generateMockQuestions(20, {});
-      dispatch({
-        type: 'START_SESSION',
-        payload: {
-          testType: 'SHSAT',
-          sessionType: 'topic_practice',
-          subject: 'Math',
-          topic: 'Algebra',
-          questions: mockQuestions
+    const initializeSession = async () => {
+      if (!session && sessionId) {
+        setIsInitializing(true);
+        
+        try {
+          // Try to fetch real questions from Supabase
+          const questions = await fetchQuestions({
+            testType: 'SHSAT',
+            count: 20
+          });
+          
+          let finalQuestions = questions;
+          
+          // If no questions found, use mock data as fallback
+          if (!questions || questions.length === 0) {
+            console.warn('No questions found in database, using mock data');
+            finalQuestions = generateMockQuestions(20, {});
+          } else if (questions.length < 20) {
+            console.warn(`Only ${questions.length} questions found, supplementing with mock data`);
+            const mockQuestions = generateMockQuestions(20 - questions.length, {});
+            finalQuestions = [...questions, ...mockQuestions];
+          }
+
+          dispatch({
+            type: 'START_SESSION',
+            payload: {
+              testType: 'SHSAT',
+              sessionType: 'topic_practice',
+              subject: 'Math',
+              topic: 'General Practice',
+              questions: finalQuestions
+            }
+          });
+        } catch (error) {
+          console.error('Error initializing session:', error);
+          // Fallback to mock questions
+          const mockQuestions = generateMockQuestions(20, {});
+          dispatch({
+            type: 'START_SESSION',
+            payload: {
+              testType: 'SHSAT',
+              sessionType: 'topic_practice',
+              subject: 'Math',
+              topic: 'General Practice',
+              questions: mockQuestions
+            }
+          });
+        } finally {
+          setIsInitializing(false);
         }
-      });
-    }
-  }, [session, sessionId, dispatch]);
+      } else {
+        setIsInitializing(false);
+      }
+    };
+
+    initializeSession();
+  }, [session, sessionId, dispatch, fetchQuestions]);
 
   // Show pause overlay when session is paused
   useEffect(() => {
@@ -101,12 +146,25 @@ const PracticeInterface = () => {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [session]);
 
-  if (!session) {
+  if (isInitializing || questionsLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <h2 className="text-2xl font-bold mb-4">Loading Practice Session...</h2>
           <Progress value={50} className="w-64" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-4">Session Not Found</h2>
+          <Button onClick={() => navigate('/practice')}>
+            Return to Practice
+          </Button>
         </div>
       </div>
     );
