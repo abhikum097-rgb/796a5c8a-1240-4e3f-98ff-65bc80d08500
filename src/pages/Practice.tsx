@@ -18,8 +18,8 @@ const Practice = () => {
   const { fetchQuestions, loading } = useSupabaseQuestions();
   const { isAuthenticated, requireAuth } = useAuth();
   const [selectedTestType, setSelectedTestType] = useState<'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS'>(state.user?.selectedTest || 'SHSAT');
-  const [selectedSubject, setSelectedSubject] = useState<string>('');
-  const [selectedDifficulty, setSelectedDifficulty] = useState<string>('');
+  const [selectedSubject, setSelectedSubject] = useState<string>('all');
+  const [selectedDifficulty, setSelectedDifficulty] = useState<string>('all');
 
   const testTypes: ('SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS')[] = ['SHSAT', 'SSAT', 'ISEE', 'HSPT', 'TACHS'];
   const subjects = ['Math', 'Verbal', 'Reading'];
@@ -39,10 +39,10 @@ const Practice = () => {
         count: questionCount
       };
 
-      if (selectedSubject) {
+      if (selectedSubject && selectedSubject !== 'all') {
         filters.subject = selectedSubject;
       }
-      if (selectedDifficulty) {
+      if (selectedDifficulty && selectedDifficulty !== 'all') {
         filters.difficulty = selectedDifficulty;
       }
 
@@ -58,8 +58,8 @@ const Practice = () => {
         const mockQuestions = generateMockQuestions(
           questionCount - questions.length,
           {
-            subject: selectedSubject,
-            difficulty: selectedDifficulty
+            subject: selectedSubject !== 'all' ? selectedSubject : undefined,
+            difficulty: selectedDifficulty !== 'all' ? selectedDifficulty : undefined
           }
         );
         finalQuestions = [...questions, ...mockQuestions];
@@ -72,7 +72,7 @@ const Practice = () => {
           payload: {
             testType: selectedTestType,
             sessionType,
-            subject: selectedSubject as 'Math' | 'Verbal' | 'Reading' || 'Math',
+            subject: (selectedSubject !== 'all' ? selectedSubject : 'Math') as 'Math' | 'Verbal' | 'Reading',
             topic: 'General Practice',
             questions: finalQuestions
           }
@@ -83,8 +83,8 @@ const Practice = () => {
         // Fallback to mock questions if database is completely empty
         console.log('Falling back to mock questions');
         const mockQuestions = generateMockQuestions(questionCount, {
-          subject: selectedSubject,
-          difficulty: selectedDifficulty
+          subject: selectedSubject !== 'all' ? selectedSubject : undefined,
+          difficulty: selectedDifficulty !== 'all' ? selectedDifficulty : undefined
         });
         
         dispatch({
@@ -92,7 +92,7 @@ const Practice = () => {
           payload: {
             testType: selectedTestType,
             sessionType,
-            subject: selectedSubject as 'Math' | 'Verbal' | 'Reading' || 'Math',
+            subject: (selectedSubject !== 'all' ? selectedSubject : 'Math') as 'Math' | 'Verbal' | 'Reading',
             topic: 'General Practice',
             questions: mockQuestions
           }
@@ -104,8 +104,8 @@ const Practice = () => {
       // Fallback to mock questions on error
       console.log('Error occurred, falling back to mock questions');
       const mockQuestions = generateMockQuestions(questionCount, {
-        subject: selectedSubject,
-        difficulty: selectedDifficulty
+        subject: selectedSubject !== 'all' ? selectedSubject : undefined,
+        difficulty: selectedDifficulty !== 'all' ? selectedDifficulty : undefined
       });
       
       dispatch({
@@ -113,7 +113,7 @@ const Practice = () => {
         payload: {
           testType: selectedTestType,
           sessionType,
-          subject: selectedSubject as 'Math' | 'Verbal' | 'Reading' || 'Math',
+          subject: (selectedSubject !== 'all' ? selectedSubject : 'Math') as 'Math' | 'Verbal' | 'Reading',
           topic: 'General Practice',
           questions: mockQuestions
         }
@@ -171,7 +171,7 @@ const Practice = () => {
                   <SelectValue placeholder="All subjects" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All subjects</SelectItem>
+                  <SelectItem value="all">All subjects</SelectItem>
                   {subjects.map(subject => (
                     <SelectItem key={subject} value={subject}>{subject}</SelectItem>
                   ))}
@@ -186,7 +186,7 @@ const Practice = () => {
                   <SelectValue placeholder="All difficulties" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All difficulties</SelectItem>
+                  <SelectItem value="all">All difficulties</SelectItem>
                   {difficulties.map(difficulty => (
                     <SelectItem key={difficulty} value={difficulty}>{difficulty}</SelectItem>
                   ))}
@@ -341,10 +341,10 @@ const Practice = () => {
                 <div className="flex items-center space-x-3">
                   <Badge variant="outline">{subject.subject}</Badge>
                   <span className="text-sm text-muted-foreground">
-                    {subject.accuracy}% accuracy
+                    {subject.averageScore}% accuracy
                   </span>
                 </div>
-                <Progress value={subject.accuracy} className="w-32 h-2" />
+                <Progress value={subject.averageScore} className="w-32 h-2" />
               </div>
             ))}
           </div>
