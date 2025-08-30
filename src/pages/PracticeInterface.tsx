@@ -362,80 +362,94 @@ const PracticeInterface = () => {
         <div className="lg:flex-[7] flex flex-col p-6 overflow-y-auto lg:border-r">
           {currentQuestion && (
             <div className="max-w-4xl mx-auto space-y-6">
-              {/* Question Text */}
-              <Card>
-                <CardContent className="p-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Badge variant="outline" className="text-xs">
-                        {currentQuestion.subject} • {currentQuestion.topic}
-                      </Badge>
-                      <Button
-                        variant={currentAnswer?.isFlagged ? "default" : "outline"}
-                        size="sm"
-                        onClick={handleFlag}
-                      >
-                        <Flag className={`h-4 w-4 mr-2 ${currentAnswer?.isFlagged ? 'fill-current' : ''}`} />
-                        {currentAnswer?.isFlagged ? 'Flagged' : 'Flag'}
-                      </Button>
-                    </div>
-                    
-                    <div className="text-lg leading-relaxed">
-                      {currentQuestion.questionText}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              {/* Fixed Height Question Container */}
+              <div className="h-[480px] overflow-y-auto">
+                <div className="space-y-6 pr-2">
+                  {/* Question Text */}
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <Badge variant="outline" className="text-xs">
+                            {currentQuestion.subject} • {currentQuestion.topic}
+                          </Badge>
+                          <Button
+                            variant={currentAnswer?.isFlagged ? "default" : "outline"}
+                            size="sm"
+                            onClick={handleFlag}
+                          >
+                            <Flag className={`h-4 w-4 mr-2 ${currentAnswer?.isFlagged ? 'fill-current' : ''}`} />
+                            {currentAnswer?.isFlagged ? 'Flagged' : 'Flag'}
+                          </Button>
+                        </div>
+                        
+                        <div className="text-lg leading-relaxed">
+                          {currentQuestion.questionText}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
 
-              {/* Answer Options */}
-              <div className="space-y-3">
-                {Object.entries(currentQuestion.options).map(([option, text]) => (
-                  <Button
-                    key={option}
-                    variant={currentAnswer?.selectedAnswer === option ? "default" : "outline"}
-                    className="w-full justify-start text-left p-4 h-auto min-h-[3rem]"
-                    onClick={() => handleAnswerSelect(option as 'A' | 'B' | 'C' | 'D')}
-                  >
-                    <span className="font-bold mr-3 min-w-[1.5rem]">{option}.</span>
-                    <span className="flex-1">{text}</span>
-                  </Button>
-                ))}
+                  {/* Answer Options */}
+                  <div className="space-y-3">
+                    {Object.entries(currentQuestion.options).map(([option, text]) => (
+                      <Button
+                        key={option}
+                        variant={currentAnswer?.selectedAnswer === option ? "default" : "outline"}
+                        className="w-full justify-start text-left p-4 h-auto min-h-[3rem]"
+                        onClick={() => handleAnswerSelect(option as 'A' | 'B' | 'C' | 'D')}
+                      >
+                        <span className="font-bold mr-3 min-w-[1.5rem]">{option}.</span>
+                        <span className="flex-1">{text}</span>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
-              {/* Navigation */}
-              <div className="flex justify-between items-center mt-8 pt-6 border-t border-border">
-                <div className="flex-1">
-                  <Button 
-                    variant="ghost" 
-                    onClick={handlePrevious}
-                    disabled={session.currentQuestion === 0}
-                    className="flex items-center space-x-2 px-6 py-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                    <span>Previous</span>
-                  </Button>
-                </div>
-                
-                <div className="flex-1 flex justify-center">
-                  <Button 
-                    variant="secondary"
-                    onClick={handleFinishPractice} 
-                    className="flex items-center space-x-2 px-6 py-3 rounded-lg font-medium"
-                  >
-                    <span>Finish</span>
-                    <Square className="w-5 h-5" />
-                  </Button>
-                </div>
-                
-                <div className="flex-1 flex justify-end">
-                  <Button 
-                    onClick={handleNext}
-                    disabled={session.currentQuestion === session.questions.length - 1}
-                    className="flex items-center space-x-2 bg-primary text-primary-foreground px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <span>Next</span>
-                    <ChevronRight className="w-5 h-5" />
-                  </Button>
+              {/* Fixed Navigation Bar */}
+              <div className="sticky bottom-0 bg-card border-t border-border -mx-6 -mb-6 p-6 mt-6">
+                <div className="grid grid-cols-3 gap-4">
+                  {/* Previous Button - Left */}
+                  <div className="flex justify-start">
+                    <Button 
+                      variant="outline" 
+                      onClick={handlePrevious}
+                      disabled={session.currentQuestion === 0}
+                      className="flex items-center space-x-2 px-6 py-3 min-w-[120px] disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>Previous</span>
+                    </Button>
+                  </div>
+                  
+                  {/* Center - Question Counter */}
+                  <div className="flex justify-center items-center">
+                    <span className="text-sm text-muted-foreground font-medium">
+                      {session.currentQuestion + 1} / {session.questions.length}
+                    </span>
+                  </div>
+                  
+                  {/* Next/Submit Button - Right */}
+                  <div className="flex justify-end">
+                    {session.currentQuestion === session.questions.length - 1 ? (
+                      <Button 
+                        onClick={handleFinishPractice} 
+                        className="flex items-center space-x-2 px-6 py-3 min-w-[120px] bg-success text-success-foreground hover:bg-success/90"
+                      >
+                        <span>Submit</span>
+                        <Square className="w-4 h-4" />
+                      </Button>
+                    ) : (
+                      <Button 
+                        onClick={handleNext}
+                        className="flex items-center space-x-2 px-6 py-3 min-w-[120px] bg-primary text-primary-foreground hover:bg-primary/90"
+                      >
+                        <span>Next</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
