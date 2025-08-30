@@ -405,42 +405,37 @@ const PracticeInterface = () => {
               {/* Navigation */}
               <div className="flex justify-between items-center mt-8 pt-6 border-t border-border">
                 <div className="flex-1">
-                  {session.currentQuestion > 0 && (
-                    <Button 
-                      variant="ghost" 
-                      onClick={handlePrevious} 
-                      className="flex items-center space-x-2 px-6 py-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                      <span>Previous</span>
-                    </Button>
-                  )}
+                  <Button 
+                    variant="ghost" 
+                    onClick={handlePrevious}
+                    disabled={session.currentQuestion === 0}
+                    className="flex items-center space-x-2 px-6 py-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                    <span>Previous</span>
+                  </Button>
                 </div>
                 
-                <div className="flex-1 text-center">
-                  <span className="text-sm text-muted-foreground">
-                    Question {session.currentQuestion + 1} of {session.questions.length}
-                  </span>
+                <div className="flex-1 flex justify-center">
+                  <Button 
+                    variant="secondary"
+                    onClick={handleFinishPractice} 
+                    className="flex items-center space-x-2 px-6 py-3 rounded-lg font-medium"
+                  >
+                    <span>Finish</span>
+                    <Square className="w-5 h-5" />
+                  </Button>
                 </div>
                 
                 <div className="flex-1 flex justify-end">
-                  {session.currentQuestion === session.questions.length - 1 ? (
-                    <Button 
-                      onClick={handleFinishPractice} 
-                      className="flex items-center space-x-2 bg-success text-success-foreground px-6 py-3 rounded-lg font-medium hover:bg-success/90 transition-colors"
-                    >
-                      <span>Finish Practice</span>
-                      <Square className="w-5 h-5" />
-                    </Button>
-                  ) : (
-                    <Button 
-                      onClick={handleNext} 
-                      className="flex items-center space-x-2 bg-primary text-primary-foreground px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors"
-                    >
-                      <span>Next</span>
-                      <ChevronRight className="w-5 h-5" />
-                    </Button>
-                  )}
+                  <Button 
+                    onClick={handleNext}
+                    disabled={session.currentQuestion === session.questions.length - 1}
+                    className="flex items-center space-x-2 bg-primary text-primary-foreground px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span>Next</span>
+                    <ChevronRight className="w-5 h-5" />
+                  </Button>
                 </div>
               </div>
             </div>
