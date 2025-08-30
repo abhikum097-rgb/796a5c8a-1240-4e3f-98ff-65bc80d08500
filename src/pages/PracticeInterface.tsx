@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -216,6 +218,102 @@ const PracticeInterface = () => {
     }
   };
 
+  const handleFinishPractice = async () => {
+    if (!session) return;
+    
+    // Complete the session in state
+    dispatch({ type: 'COMPLETE_SESSION' });
+    
+    // Save session to database if user is authenticated
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      try {
+        // Save practice session
+        const { data: savedSession, error: sessionError } = await supabase
+          .from('practice_sessions')
+          .insert({
+            user_id: user.id,
+            test_type: session.testType,
+            session_type: session.sessionType,
+            subject: session.subject || null,
+            topic: session.topic || null,
+            difficulty: session.difficulty || null,
+            total_questions: session.questions.length,
+            status: 'completed',
+            end_time: new Date().toISOString(),
+            total_time_spent: session.sessionTime
+          })
+          .select()
+          .single();
+
+        if (sessionError) {
+          console.error('Error saving session:', sessionError);
+          throw sessionError;
+        }
+
+        // Save user answers
+        const answersToSave = Object.entries(session.userAnswers)
+          .filter(([_, answer]) => answer.selectedAnswer)
+          .map(([questionId, answer]) => {
+            const question = session.questions.find(q => q.id === questionId);
+            const isCorrect = question ? answer.selectedAnswer === question.correctAnswer : false;
+            
+            return {
+              session_id: savedSession.id,
+              question_id: questionId,
+              user_answer: answer.selectedAnswer,
+              is_correct: isCorrect,
+              is_flagged: answer.isFlagged || false,
+              time_spent: answer.timeSpent || 0
+            };
+          });
+
+        if (answersToSave.length > 0) {
+          const { error: answersError } = await supabase
+            .from('user_answers')
+            .insert(answersToSave);
+
+          if (answersError) {
+            console.error('Error saving answers:', answersError);
+          }
+        }
+
+        // Call complete-session function to update analytics
+        try {
+          await supabase.functions.invoke('complete-session', {
+            body: {
+              sessionId: savedSession.id,
+              totalTimeSpent: session.sessionTime
+            }
+          });
+        } catch (functionError) {
+          console.error('Error calling complete-session function:', functionError);
+        }
+
+        toast({
+          title: "Practice Completed!",
+          description: "Your results have been saved.",
+        });
+
+        // Navigate to results page
+        navigate(`/results/${savedSession.id}`);
+      } catch (error) {
+        console.error('Error completing session:', error);
+        toast({
+          title: "Save Error",
+          description: "Your practice was completed but results couldn't be saved.",
+          variant: "destructive"
+        });
+        
+        // Still navigate to results even if save failed
+        navigate(`/results/${session.id}`);
+      }
+    } else {
+      // Not authenticated, just go to results
+      navigate(`/results/${session.id}`);
+    }
+  };
+
   const handleExit = () => {
     setShowExitDialog(true);
   };
@@ -315,13 +413,22 @@ const PracticeInterface = () => {
                   Previous
                 </Button>
                 
-                <Button
-                  onClick={handleNext}
-                  disabled={session.currentQuestion === session.questions.length - 1}
-                >
-                  Next
-                  <ChevronRight className="h-4 w-4 ml-2" />
-                </Button>
+                {session.currentQuestion === session.questions.length - 1 ? (
+                  <Button
+                    onClick={handleFinishPractice}
+                    className="bg-success hover:bg-success/90 text-success-foreground"
+                  >
+                    Finish Practice
+                    <Square className="h-4 w-4 ml-2" />
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleNext}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4 ml-2" />
+                  </Button>
+                )}
               </div>
             </div>
           )}
