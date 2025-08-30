@@ -1,13 +1,41 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProgressChart } from "@/components/ProgressChart";
 import { StatCard } from "@/components/StatCard";
+import PracticeHistoryTable from "@/components/PracticeHistoryTable";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BarChart3, Clock, Target, TrendingUp } from "lucide-react";
 import { useApp } from "@/context/AppContext";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 const Analytics = () => {
   const { state, dispatch } = useApp();
+  const { user, isAuthenticated } = useAuth();
   const analytics = state.analytics;
+
+  // Fetch practice sessions for authenticated users
+  const { data: sessions = [] } = useQuery({
+    queryKey: ['practice_sessions', user?.id],
+    queryFn: async () => {
+      if (!isAuthenticated || !user) return [];
+      
+      const { data, error } = await supabase
+        .from('practice_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      
+      if (error) {
+        console.error('Error fetching practice sessions:', error);
+        return [];
+      }
+      
+      return data || [];
+    },
+    enabled: isAuthenticated && !!user
+  });
 
   return (
     <div className="space-y-8">
@@ -94,6 +122,9 @@ const Analytics = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Practice History Table */}
+      <PracticeHistoryTable sessions={sessions} />
     </div>
   );
 };

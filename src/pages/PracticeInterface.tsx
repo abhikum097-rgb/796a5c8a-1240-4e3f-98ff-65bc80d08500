@@ -403,32 +403,45 @@ const PracticeInterface = () => {
               </div>
 
               {/* Navigation */}
-              <div className="flex justify-between pt-6">
-                <Button
-                  variant="outline"
-                  onClick={handlePrevious}
-                  disabled={session.currentQuestion === 0}
-                >
-                  <ChevronLeft className="h-4 w-4 mr-2" />
-                  Previous
-                </Button>
+              <div className="flex justify-between items-center mt-8 pt-6 border-t border-border">
+                <div className="flex-1">
+                  {session.currentQuestion > 0 && (
+                    <Button 
+                      variant="ghost" 
+                      onClick={handlePrevious} 
+                      className="flex items-center space-x-2 px-6 py-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                      <span>Previous</span>
+                    </Button>
+                  )}
+                </div>
                 
-                {session.currentQuestion === session.questions.length - 1 ? (
-                  <Button
-                    onClick={handleFinishPractice}
-                    className="bg-success hover:bg-success/90 text-success-foreground"
-                  >
-                    Finish Practice
-                    <Square className="h-4 w-4 ml-2" />
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={handleNext}
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4 ml-2" />
-                  </Button>
-                )}
+                <div className="flex-1 text-center">
+                  <span className="text-sm text-muted-foreground">
+                    Question {session.currentQuestion + 1} of {session.questions.length}
+                  </span>
+                </div>
+                
+                <div className="flex-1 flex justify-end">
+                  {session.currentQuestion === session.questions.length - 1 ? (
+                    <Button 
+                      onClick={handleFinishPractice} 
+                      className="flex items-center space-x-2 bg-success text-success-foreground px-6 py-3 rounded-lg font-medium hover:bg-success/90 transition-colors"
+                    >
+                      <span>Finish Practice</span>
+                      <Square className="w-5 h-5" />
+                    </Button>
+                  ) : (
+                    <Button 
+                      onClick={handleNext} 
+                      className="flex items-center space-x-2 bg-primary text-primary-foreground px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors"
+                    >
+                      <span>Next</span>
+                      <ChevronRight className="w-5 h-5" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           )}

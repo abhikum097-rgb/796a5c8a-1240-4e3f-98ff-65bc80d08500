@@ -10,6 +10,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Practice from "./pages/Practice";
+import PracticeSelection from "./pages/PracticeSelection";
 import PracticeInterface from "./pages/PracticeInterface";
 import Results from "./pages/Results";
 import ResultsReview from "./pages/ResultsReview";
@@ -49,6 +50,11 @@ const App = () => (
             
             <Route path="/practice" element={<DashboardLayout />}>
               <Route index element={<Practice />} />
+              <Route path="shsat" element={<PracticeSelection testType="SHSAT" />} />
+              <Route path="ssat" element={<PracticeSelection testType="SSAT" />} />
+              <Route path="isee" element={<PracticeSelection testType="ISEE" />} />
+              <Route path="hspt" element={<PracticeSelection testType="HSPT" />} />
+              <Route path="tachs" element={<PracticeSelection testType="TACHS" />} />
               <Route path="session/:sessionId" element={<PracticeInterface />} />
             </Route>
             
