@@ -14,6 +14,78 @@ export type Database = {
   }
   public: {
     Tables: {
+      document_sessions: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      documents: {
+        Row: {
+          content_text: string | null
+          created_at: string | null
+          file_path: string
+          file_size: number | null
+          id: string
+          is_active: boolean | null
+          metadata: Json | null
+          name: string
+          type: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          content_text?: string | null
+          created_at?: string | null
+          file_path: string
+          file_size?: number | null
+          id?: string
+          is_active?: boolean | null
+          metadata?: Json | null
+          name: string
+          type: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          content_text?: string | null
+          created_at?: string | null
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          is_active?: boolean | null
+          metadata?: Json | null
+          name?: string
+          type?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       practice_sessions: {
         Row: {
           created_at: string | null
@@ -199,6 +271,36 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      session_documents: {
+        Row: {
+          document_id: string
+          session_id: string
+        }
+        Insert: {
+          document_id: string
+          session_id: string
+        }
+        Update: {
+          document_id?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_documents_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_documents_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "document_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       subscriptions: {
         Row: {
