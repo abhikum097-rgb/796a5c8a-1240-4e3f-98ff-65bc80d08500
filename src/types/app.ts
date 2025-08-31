@@ -92,7 +92,7 @@ export interface AnalyticsData {
 
 export interface AppState {
   currentPage: string;
-  user: User;
+  user: User | null;
   practiceSession: PracticeSession | null;
   analytics: AnalyticsData;
   selectedFilters: {
@@ -120,4 +120,4 @@ export type AppAction =
   | { type: 'COMPLETE_SESSION' }
   | { type: 'SET_CURRENT_PAGE'; payload: string }
   | { type: 'UPDATE_ANALYTICS'; payload: AnalyticsData }
-  | { type: 'UPDATE_USER'; payload: User };
+  | { type: 'UPDATE_USER'; payload: User | null };

@@ -8,6 +8,19 @@ const Billing = () => {
   const { state } = useApp();
   const user = state.user;
 
+  if (!user) {
+    return (
+      <div className="space-y-8 max-w-6xl">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Billing & Subscription</h1>
+          <p className="text-muted-foreground mt-2">
+            Please log in to access your billing information
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const plans = [
     {
       name: 'Free',
@@ -53,9 +66,13 @@ const Billing = () => {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold capitalize">{user.subscriptionTier.replace('_', ' ')}</h3>
-              <p className="text-muted-foreground">Next billing date: January 15, 2024</p>
+              <p className="text-muted-foreground">
+                {user.subscriptionTier === 'free' ? 'Free plan - no billing' : 'Next billing date: January 15, 2024'}
+              </p>
             </div>
-            <Badge variant="default">Active</Badge>
+            <Badge variant={user.subscriptionTier === 'free' ? 'secondary' : 'default'}>
+              {user.subscriptionTier === 'free' ? 'Free' : 'Active'}
+            </Badge>
           </div>
         </CardContent>
       </Card>
