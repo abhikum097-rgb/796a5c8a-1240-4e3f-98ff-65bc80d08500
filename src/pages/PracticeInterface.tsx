@@ -359,11 +359,11 @@ const PracticeInterface = () => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Question Panel (70%) */}
-        <div className="lg:flex-[7] flex flex-col p-6 overflow-y-auto lg:border-r">
+        <div className="lg:flex-[7] flex flex-col p-6 overflow-y-scroll scrollbar-stable lg:border-r">
           {currentQuestion && (
             <div className="max-w-4xl mx-auto space-y-6">
               {/* Fixed Height Question Container */}
-              <div className="h-[480px] overflow-y-auto">
+              <div className="h-[480px] overflow-y-scroll scrollbar-stable">
                 <div className="space-y-6 pr-2">
                   {/* Question Text */}
                   <Card>
@@ -408,7 +408,7 @@ const PracticeInterface = () => {
               </div>
 
               {/* Fixed Navigation Bar */}
-              <div className="sticky bottom-0 bg-card border-t border-border -mx-6 -mb-6 p-6 mt-6">
+              <div className="sticky bottom-0 bg-card border-t border-border p-6 mt-6">
                 <div className="grid grid-cols-3 gap-4">
                   {/* Previous Button - Left */}
                   <div className="flex justify-start">
@@ -457,7 +457,7 @@ const PracticeInterface = () => {
         </div>
 
         {/* Navigation Panel (30%) */}
-        <div className="lg:flex-[3] border-l bg-muted/30 p-4 space-y-4 overflow-y-auto">
+        <div className="lg:flex-[3] border-l bg-muted/30 p-4 space-y-4 overflow-y-scroll scrollbar-stable">
           <QuestionNavigator />
           <SessionControls />
         </div>
