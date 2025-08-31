@@ -46,6 +46,9 @@ verify_jwt = true
 [functions.submit-answer]
 verify_jwt = true
 
+[functions.bulk-import-questions]
+verify_jwt = true
+
 [functions.complete-session]
 verify_jwt = true
 

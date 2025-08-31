@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle, XCircle, Upload, FileText, Images, List } from 'lucide-react';
+import { CheckCircle, XCircle, Upload, FileText, Images, List, Download, AlertCircle } from 'lucide-react';
 
 const QUESTION_PROCESSING_PROMPT = `
 You are an expert test prep question parser. Convert the provided question text into a structured JSON format.
@@ -67,8 +67,12 @@ const QuestionsAdmin = () => {
   const [textInput, setTextInput] = useState('');
   const [bulkInput, setBulkInput] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [jsonFile, setJsonFile] = useState<File | null>(null);
+  const [overwriteDuplicates, setOverwriteDuplicates] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [results, setResults] = useState<ProcessingResult[]>([]);
+  const [bulkResults, setBulkResults] = useState<any>(null);
 
   if (adminLoading) {
     return (
@@ -202,6 +206,71 @@ const QuestionsAdmin = () => {
     return results;
   };
 
+  const parseCsvFile = (content: string): any[] => {
+    const lines = content.split('\n').filter(line => line.trim());
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    const questions = lines.slice(1).map(line => {
+      const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+      const question: any = {};
+      headers.forEach((header, index) => {
+        question[header] = values[index] || '';
+      });
+      return question;
+    });
+
+    return questions;
+  };
+
+  const processBulkFile = async (file: File): Promise<void> => {
+    try {
+      const content = await file.text();
+      let questions: any[] = [];
+
+      if (file.name.toLowerCase().endsWith('.csv')) {
+        questions = parseCsvFile(content);
+      } else if (file.name.toLowerCase().endsWith('.json')) {
+        const parsed = JSON.parse(content);
+        questions = Array.isArray(parsed) ? parsed : [parsed];
+      } else {
+        throw new Error('Unsupported file format. Please use CSV or JSON.');
+      }
+
+      if (questions.length === 0) {
+        throw new Error('No valid questions found in file');
+      }
+
+      console.log(`Processing ${questions.length} questions from file`);
+
+      const response = await supabase.functions.invoke('bulk-import-questions', {
+        body: {
+          questions,
+          overwrite_duplicates: overwriteDuplicates
+        }
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      setBulkResults(response.data.results);
+      
+      toast({
+        title: "Bulk Import Completed",
+        description: response.data.message,
+      });
+
+    } catch (error: any) {
+      console.error('Bulk file processing failed:', error);
+      toast({
+        title: "Bulk Import Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleProcess = async () => {
     setIsProcessing(true);
     setResults([]);
@@ -209,7 +278,10 @@ const QuestionsAdmin = () => {
     try {
       let processingResults: ProcessingResult[] = [];
 
-      if (textInput.trim()) {
+      if (csvFile || jsonFile) {
+        await processBulkFile(csvFile || jsonFile!);
+        return; // Bulk file processing has its own result handling
+      } else if (textInput.trim()) {
         const result = await processTextQuestion(textInput);
         processingResults = [result];
       } else if (imageFile) {
@@ -251,7 +323,24 @@ const QuestionsAdmin = () => {
     setTextInput('');
     setBulkInput('');
     setImageFile(null);
+    setCsvFile(null);
+    setJsonFile(null);
     setResults([]);
+    setBulkResults(null);
+  };
+
+  const downloadSampleCsv = () => {
+    const sampleData = `test_type,subject,topic,sub_topic,difficulty_level,question_text,option_a,option_b,option_c,option_d,correct_answer,explanation,time_allocated
+SHSAT,Math,Algebra,Linear Equations,Medium,"Solve for x: 2x + 5 = 13",x = 4,x = 8,x = 9,x = 3,A,"To solve 2x + 5 = 13: Subtract 5 from both sides: 2x = 8. Divide by 2: x = 4.",90
+SSAT,Verbal,Vocabulary,Synonyms,Easy,"Choose the word that means the same as HAPPY:",sad,joyful,angry,tired,B,"Happy means joyful or pleased. The other options are antonyms or unrelated.",60`;
+    
+    const blob = new Blob([sampleData], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'sample_questions.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   return (
@@ -339,7 +428,7 @@ const QuestionsAdmin = () => {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="text" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="text" className="flex items-center gap-2">
                 <FileText className="h-4 w-4" />
                 Text Input
@@ -350,7 +439,11 @@ const QuestionsAdmin = () => {
               </TabsTrigger>
               <TabsTrigger value="bulk" className="flex items-center gap-2">
                 <List className="h-4 w-4" />
-                Bulk Import
+                Bulk Text
+              </TabsTrigger>
+              <TabsTrigger value="file" className="flex items-center gap-2">
+                <Upload className="h-4 w-4" />
+                File Import
               </TabsTrigger>
             </TabsList>
 
@@ -389,7 +482,7 @@ const QuestionsAdmin = () => {
             </TabsContent>
 
             <TabsContent value="bulk" className="space-y-4">
-              <Label htmlFor="bulk-input">Bulk Questions</Label>
+              <Label htmlFor="bulk-input">Bulk Questions (Text)</Label>
               <Textarea
                 id="bulk-input"
                 rows={15}
@@ -399,6 +492,89 @@ const QuestionsAdmin = () => {
                 className="resize-none"
               />
             </TabsContent>
+
+            <TabsContent value="file" className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label>File Import (CSV/JSON)</Label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={downloadSampleCsv}
+                  className="flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Sample CSV
+                </Button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
+                  <input
+                    id="csv-input"
+                    type="file"
+                    accept=".csv"
+                    onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="csv-input"
+                    className="cursor-pointer flex flex-col items-center gap-2"
+                  >
+                    <Upload className="h-8 w-8 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                      {csvFile ? csvFile.name : 'Click to upload CSV file'}
+                    </p>
+                  </label>
+                </div>
+
+                <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
+                  <input
+                    id="json-input"
+                    type="file"
+                    accept=".json"
+                    onChange={(e) => setJsonFile(e.target.files?.[0] || null)}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="json-input"
+                    className="cursor-pointer flex flex-col items-center gap-2"
+                  >
+                    <Upload className="h-8 w-8 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                      {jsonFile ? jsonFile.name : 'Click to upload JSON file'}
+                    </p>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="overwrite-duplicates"
+                  checked={overwriteDuplicates}
+                  onChange={(e) => setOverwriteDuplicates(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="overwrite-duplicates" className="text-sm">
+                  Overwrite duplicate questions
+                </Label>
+              </div>
+
+              <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                  <div className="text-sm text-blue-800 dark:text-blue-200">
+                    <p className="font-medium mb-1">File Format Requirements:</p>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li>CSV files must include headers in the first row</li>
+                      <li>JSON files should contain an array of question objects</li>
+                      <li>Required fields: test_type, subject, topic, difficulty_level, question_text, option_a, option_b, option_c, option_d, correct_answer, explanation</li>
+                      <li>Optional fields: sub_topic, time_allocated</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
@@ -407,7 +583,7 @@ const QuestionsAdmin = () => {
       <div className="flex gap-4">
         <Button 
           onClick={handleProcess} 
-          disabled={isProcessing || (!textInput.trim() && !imageFile && !bulkInput.trim())}
+          disabled={isProcessing || (!textInput.trim() && !imageFile && !bulkInput.trim() && !csvFile && !jsonFile)}
           className="flex items-center gap-2"
         >
           {isProcessing ? (
@@ -424,7 +600,56 @@ const QuestionsAdmin = () => {
         </Button>
       </div>
 
-      {/* Results Display */}
+      {/* Bulk Import Results */}
+      {bulkResults && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Bulk Import Results</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-center p-4 bg-green-50 dark:bg-green-950 rounded-lg">
+                <div className="text-2xl font-bold text-green-800 dark:text-green-200">
+                  {bulkResults.successful}
+                </div>
+                <div className="text-sm text-green-600 dark:text-green-400">Successful</div>
+              </div>
+              <div className="text-center p-4 bg-red-50 dark:bg-red-950 rounded-lg">
+                <div className="text-2xl font-bold text-red-800 dark:text-red-200">
+                  {bulkResults.failed}
+                </div>
+                <div className="text-sm text-red-600 dark:text-red-400">Failed</div>
+              </div>
+              <div className="text-center p-4 bg-yellow-50 dark:bg-yellow-950 rounded-lg">
+                <div className="text-2xl font-bold text-yellow-800 dark:text-yellow-200">
+                  {bulkResults.duplicates_skipped}
+                </div>
+                <div className="text-sm text-yellow-600 dark:text-yellow-400">Duplicates Skipped</div>
+              </div>
+            </div>
+            
+            {bulkResults.errors && bulkResults.errors.length > 0 && (
+              <div className="mt-4">
+                <h4 className="font-medium mb-2">Errors:</h4>
+                <div className="max-h-32 overflow-y-auto space-y-1">
+                  {bulkResults.errors.slice(0, 10).map((error: string, index: number) => (
+                    <div key={index} className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950 p-2 rounded">
+                      {error}
+                    </div>
+                  ))}
+                  {bulkResults.errors.length > 10 && (
+                    <div className="text-sm text-muted-foreground">
+                      ...and {bulkResults.errors.length - 10} more errors
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Individual Processing Results Display */}
       {results.length > 0 && (
         <Card>
           <CardHeader>

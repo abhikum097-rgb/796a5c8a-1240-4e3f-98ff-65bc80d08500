@@ -21,7 +21,8 @@ import {
   Menu,
   X,
   Home,
-  GraduationCap
+  GraduationCap,
+  FileText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +43,12 @@ const DashboardLayout = () => {
       href: "/analytics", 
       icon: BarChart3, 
       current: location.pathname === "/analytics" 
+    },
+    { 
+      name: "Questions Admin", 
+      href: "/questions-making", 
+      icon: FileText, 
+      current: location.pathname === "/questions-making" 
     },
     { 
       name: "Settings", 
