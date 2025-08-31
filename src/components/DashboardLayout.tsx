@@ -45,15 +45,15 @@ const DashboardLayout = () => {
     },
     { 
       name: "Settings", 
-      href: "/settings", 
+      href: "/dashboard/settings", 
       icon: Settings, 
-      current: location.pathname === "/settings" 
+      current: location.pathname === "/dashboard/settings" 
     },
     { 
       name: "Billing", 
-      href: "/billing", 
+      href: "/dashboard/billing", 
       icon: CreditCard, 
-      current: location.pathname === "/billing" 
+      current: location.pathname === "/dashboard/billing" 
     },
   ];
 
