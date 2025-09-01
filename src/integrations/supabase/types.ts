@@ -507,6 +507,36 @@ export type Database = {
         }
         Relationships: []
       }
+      user_question_history: {
+        Row: {
+          created_at: string
+          id: string
+          last_seen_at: string
+          question_id: string
+          session_id: string | null
+          times_seen: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_seen_at?: string
+          question_id: string
+          session_id?: string | null
+          times_seen?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_seen_at?: string
+          question_id?: string
+          session_id?: string | null
+          times_seen?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -533,6 +563,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_available_topics: {
+        Args: { p_subject?: string; p_test_type: string }
+        Returns: {
+          question_count: number
+          topic: string
+        }[]
+      }
+      get_question_stats: {
+        Args: { p_subject?: string; p_test_type: string; p_topic?: string }
+        Returns: {
+          difficulty_level: string
+          question_count: number
+          subject: string
+          test_type: string
+          topic: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
