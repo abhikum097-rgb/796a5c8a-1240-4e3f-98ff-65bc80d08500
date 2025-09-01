@@ -54,3 +54,6 @@ verify_jwt = true
 
 [functions.get-analytics]
 verify_jwt = true
+
+[functions.get-topics]
+verify_jwt = false

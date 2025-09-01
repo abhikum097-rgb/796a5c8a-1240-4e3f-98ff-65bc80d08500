@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { generateMockQuestions } from "@/mock/data";
 import { useSupabaseQuestions } from "@/hooks/useSupabaseQuestions";
 import { useAuth } from "@/hooks/useAuth";
+import { TopicSelector } from "@/components/TopicSelector";
 
 const Practice = () => {
   const { state, dispatch } = useApp();
@@ -18,6 +19,7 @@ const Practice = () => {
   const { isAuthenticated, requireAuth } = useAuth();
   const [selectedTestType, setSelectedTestType] = useState<'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS'>(state.user?.selectedTest || 'SHSAT');
   const [selectedSubject, setSelectedSubject] = useState<string>('all');
+  const [selectedTopic, setSelectedTopic] = useState<string>('all');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('all');
 
   const testTypes: ('SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS')[] = ['SHSAT', 'SSAT', 'ISEE', 'HSPT', 'TACHS'];
@@ -35,11 +37,15 @@ const Practice = () => {
       
       const filters: any = {
         testType: selectedTestType,
-        count: questionCount
+        count: questionCount,
+        avoidRecent: true
       };
 
       if (selectedSubject && selectedSubject !== 'all') {
         filters.subject = selectedSubject;
+      }
+      if (selectedTopic && selectedTopic !== 'all') {
+        filters.topic = selectedTopic;
       }
       if (selectedDifficulty && selectedDifficulty !== 'all') {
         filters.difficulty = selectedDifficulty;
@@ -148,7 +154,7 @@ const Practice = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="text-sm font-medium mb-2 block">Test Type</label>
               <Select value={selectedTestType} onValueChange={(value) => setSelectedTestType(value as 'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS')}>
@@ -177,6 +183,13 @@ const Practice = () => {
                 </SelectContent>
               </Select>
             </div>
+            
+            <TopicSelector
+              testType={selectedTestType}
+              subject={selectedSubject !== 'all' ? selectedSubject : undefined}
+              selectedTopic={selectedTopic}
+              onTopicChange={setSelectedTopic}
+            />
             
             <div>
               <label className="text-sm font-medium mb-2 block">Difficulty (Optional)</label>

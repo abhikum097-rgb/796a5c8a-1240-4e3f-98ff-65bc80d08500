@@ -8,6 +8,8 @@ interface QuestionFilters {
   difficulty?: string;
   testType?: string;
   count?: number;
+  avoidRecent?: boolean;
+  sessionId?: string;
 }
 
 export const useSupabaseQuestions = () => {
