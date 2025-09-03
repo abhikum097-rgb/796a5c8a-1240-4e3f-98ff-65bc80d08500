@@ -4,13 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { Clock, Target, TrendingUp, Play, BookOpen, Users, Award } from "lucide-react";
+import { Clock, Target, TrendingUp, Play, BookOpen, Users, Award, CheckCircle, Calendar } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { useNavigate } from "react-router-dom";
 import { generateMockQuestions } from "@/mock/data";
 import { useSupabaseQuestions } from "@/hooks/useSupabaseQuestions";
 import { useAuth } from "@/hooks/useAuth";
 import { TopicSelector } from "@/components/TopicSelector";
+import { useQuestionCount } from "@/hooks/useQuestionCount";
+import { useRecentPractice } from "@/hooks/useRecentPractice";
+import { formatDistance } from 'date-fns';
 
 const Practice = () => {
   const { state, dispatch } = useApp();
@@ -21,10 +24,34 @@ const Practice = () => {
   const [selectedSubject, setSelectedSubject] = useState<string>('all');
   const [selectedTopic, setSelectedTopic] = useState<string>('all');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('all');
+  const [selectedMode, setSelectedMode] = useState<'quick' | 'subject' | 'full' | 'mixed'>('quick');
+  
+  // Get available question count based on current filters
+  const { count: availableQuestions, loading: countLoading } = useQuestionCount({
+    testType: selectedTestType,
+    subject: selectedSubject,
+    topic: selectedTopic,
+    difficulty: selectedDifficulty
+  });
+  
+  // Get recent practice sessions
+  const { sessions: recentSessions, loading: sessionsLoading } = useRecentPractice(3);
 
   const testTypes: ('SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS')[] = ['SHSAT', 'SSAT', 'ISEE', 'HSPT', 'TACHS'];
   const subjects = ['Math', 'Verbal', 'Reading'];
   const difficulties = ['Easy', 'Medium', 'Hard'];
+  
+  const practiceModesToOptions = {
+    quick: { name: 'Quick Practice', questions: 15, time: '15 min', sessionType: 'mixed_review' as const },
+    subject: { name: 'Subject Focus', questions: 25, time: '30 min', sessionType: 'subject_practice' as const },
+    full: { name: 'Full Practice Test', questions: 50, time: '2+ hours', sessionType: 'full_test' as const },
+    mixed: { name: 'Mixed Review', questions: 30, time: '45 min', sessionType: 'mixed_review' as const }
+  };
+
+  const startCustomPractice = () => {
+    const modeConfig = practiceModesToOptions[selectedMode];
+    startPracticeSession(modeConfig.sessionType, modeConfig.questions);
+  };
 
   const startPracticeSession = async (sessionType: 'full_test' | 'subject_practice' | 'topic_practice' | 'mixed_review', questionCount: number) => {
     // Check authentication for database access
@@ -206,111 +233,187 @@ const Practice = () => {
               </Select>
             </div>
           </div>
+          
+          {/* Practice Mode Selection */}
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Practice Mode</label>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {Object.entries(practiceModesToOptions).map(([key, config]) => (
+                  <button
+                    key={key}
+                    onClick={() => setSelectedMode(key as any)}
+                    className={`p-3 rounded-lg border text-left transition-colors ${
+                      selectedMode === key
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border hover:border-primary/50 hover:bg-accent'
+                    }`}
+                  >
+                    <div className="font-medium text-sm">{config.name}</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {config.questions} questions • {config.time}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {/* Available Questions & Start Button */}
+            <div className="bg-accent/50 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Available questions: </span>
+                    <span className="font-medium text-foreground">
+                      {countLoading ? 'Loading...' : `${availableQuestions} questions`}
+                    </span>
+                  </div>
+                  {availableQuestions < practiceModesToOptions[selectedMode].questions && (
+                    <Badge variant="outline" className="text-xs">
+                      Will use mock questions
+                    </Badge>
+                  )}
+                </div>
+                <Button 
+                  onClick={startCustomPractice}
+                  disabled={loading || countLoading}
+                  size="lg"
+                  className="min-w-[140px]"
+                >
+                  {loading ? 'Loading...' : `Start ${practiceModesToOptions[selectedMode].name}`}
+                </Button>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Practice Modes */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Quick Practice */}
-        <Card className="hover:shadow-lg transition-shadow">
+      {/* Recent Practice Sessions */}
+      {isAuthenticated && recentSessions.length > 0 && (
+        <Card>
           <CardHeader>
-            <div className="flex items-center space-x-2">
-              <Play className="h-5 w-5 text-primary" />
-              <CardTitle className="text-lg">Quick Practice</CardTitle>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Calendar className="h-5 w-5 text-primary" />
+                <CardTitle>Recent Practice Sessions</CardTitle>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => navigate('/dashboard/analytics')}>
+                View All
+              </Button>
             </div>
             <CardDescription>
-              15 questions • 15 minutes
+              Your most recent practice sessions
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-sm text-muted-foreground">
-              Perfect for a quick review session
+          <CardContent>
+            <div className="space-y-3">
+              {recentSessions.map((session) => (
+                <div key={session.id} className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-1.5 bg-primary/10 rounded-md">
+                      {session.status === 'completed' ? (
+                        <CheckCircle className="h-4 w-4 text-primary" />
+                      ) : (
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-medium text-sm">
+                        {session.test_type} • {session.session_type.replace('_', ' ')}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatDistance(new Date(session.created_at), new Date(), { addSuffix: true })}
+                        {session.subject && ` • ${session.subject}`}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    {session.score !== null && (
+                      <div className="text-sm font-medium">{session.score}%</div>
+                    )}
+                    <div className="text-xs text-muted-foreground">
+                      {session.total_questions} questions
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-            <Button 
-              className="w-full" 
-              onClick={() => startPracticeSession('mixed_review', 15)}
-              disabled={loading}
-            >
-              {loading ? 'Loading...' : 'Start Quick Practice'}
-            </Button>
           </CardContent>
         </Card>
+      )}
 
-        {/* Subject Focus */}
-        <Card className="hover:shadow-lg transition-shadow">
-          <CardHeader>
-            <div className="flex items-center space-x-2">
-              <BookOpen className="h-5 w-5 text-primary" />
-              <CardTitle className="text-lg">Subject Focus</CardTitle>
+      {/* Quick Start Options */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Start Options</CardTitle>
+          <CardDescription>
+            Jump right into practice with popular configurations
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Quick Practice */}
+            <div className="p-4 border rounded-lg hover:shadow-md transition-shadow cursor-pointer" 
+                 onClick={() => startPracticeSession('mixed_review', 15)}>
+              <div className="flex items-center space-x-2 mb-2">
+                <Play className="h-4 w-4 text-primary" />
+                <div className="font-medium text-sm">Quick Practice</div>
+              </div>
+              <div className="text-xs text-muted-foreground mb-3">
+                15 questions • 15 minutes
+              </div>
+              <Button size="sm" className="w-full" disabled={loading}>
+                {loading ? 'Loading...' : 'Start'}
+              </Button>
             </div>
-            <CardDescription>
-              25 questions • 30 minutes
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-sm text-muted-foreground">
-              Deep dive into specific subjects
-            </div>
-            <Button 
-              className="w-full" 
-              onClick={() => startPracticeSession('subject_practice', 25)}
-              disabled={loading}
-            >
-              {loading ? 'Loading...' : 'Start Subject Focus'}
-            </Button>
-          </CardContent>
-        </Card>
 
-        {/* Full Practice Test */}
-        <Card className="hover:shadow-lg transition-shadow">
-          <CardHeader>
-            <div className="flex items-center space-x-2">
-              <Target className="h-5 w-5 text-primary" />
-              <CardTitle className="text-lg">Full Practice Test</CardTitle>
+            {/* Subject Focus */}
+            <div className="p-4 border rounded-lg hover:shadow-md transition-shadow cursor-pointer"
+                 onClick={() => startPracticeSession('subject_practice', 25)}>
+              <div className="flex items-center space-x-2 mb-2">
+                <BookOpen className="h-4 w-4 text-primary" />
+                <div className="font-medium text-sm">Subject Focus</div>
+              </div>
+              <div className="text-xs text-muted-foreground mb-3">
+                25 questions • 30 minutes
+              </div>
+              <Button size="sm" className="w-full" disabled={loading}>
+                {loading ? 'Loading...' : 'Start'}
+              </Button>
             </div>
-            <CardDescription>
-              50+ questions • 2+ hours
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-sm text-muted-foreground">
-              Complete test simulation experience
-            </div>
-            <Button 
-              className="w-full" 
-              onClick={() => startPracticeSession('full_test', 50)}
-              disabled={loading}
-            >
-              {loading ? 'Loading...' : 'Start Full Test'}
-            </Button>
-          </CardContent>
-        </Card>
 
-        {/* Mixed Review */}
-        <Card className="hover:shadow-lg transition-shadow">
-          <CardHeader>
-            <div className="flex items-center space-x-2">
-              <Users className="h-5 w-5 text-primary" />
-              <CardTitle className="text-lg">Mixed Review</CardTitle>
+            {/* Full Test */}
+            <div className="p-4 border rounded-lg hover:shadow-md transition-shadow cursor-pointer"
+                 onClick={() => startPracticeSession('full_test', 50)}>
+              <div className="flex items-center space-x-2 mb-2">
+                <Target className="h-4 w-4 text-primary" />
+                <div className="font-medium text-sm">Full Practice Test</div>
+              </div>
+              <div className="text-xs text-muted-foreground mb-3">
+                50+ questions • 2+ hours
+              </div>
+              <Button size="sm" className="w-full" disabled={loading}>
+                {loading ? 'Loading...' : 'Start'}
+              </Button>
             </div>
-            <CardDescription>
-              30 questions • 45 minutes
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-sm text-muted-foreground">
-              Variety of questions across all topics
+
+            {/* Mixed Review */}
+            <div className="p-4 border rounded-lg hover:shadow-md transition-shadow cursor-pointer"
+                 onClick={() => startPracticeSession('mixed_review', 30)}>
+              <div className="flex items-center space-x-2 mb-2">
+                <Users className="h-4 w-4 text-primary" />
+                <div className="font-medium text-sm">Mixed Review</div>
+              </div>
+              <div className="text-xs text-muted-foreground mb-3">
+                30 questions • 45 minutes
+              </div>
+              <Button size="sm" className="w-full" disabled={loading}>
+                {loading ? 'Loading...' : 'Start'}
+              </Button>
             </div>
-            <Button 
-              className="w-full" 
-              onClick={() => startPracticeSession('mixed_review', 30)}
-              disabled={loading}
-            >
-              {loading ? 'Loading...' : 'Start Mixed Review'}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Performance Overview */}
       <Card>
