@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSupabaseQuestions } from './useSupabaseQuestions';
+import { useAuth } from './useAuth';
 
 interface QuestionCountFilters {
   testType: string;
@@ -12,10 +13,17 @@ export const useQuestionCount = (filters: QuestionCountFilters) => {
   const [count, setCount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const { fetchQuestions } = useSupabaseQuestions();
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     const getCount = async () => {
       if (!filters.testType) return;
+      
+      // Skip count for unauthenticated users
+      if (!isAuthenticated) {
+        setCount(0);
+        return;
+      }
       
       setLoading(true);
       try {
@@ -36,7 +44,7 @@ export const useQuestionCount = (filters: QuestionCountFilters) => {
     };
 
     getCount();
-  }, [filters.testType, filters.subject, filters.topic, filters.difficulty, fetchQuestions]);
+  }, [filters.testType, filters.subject, filters.topic, filters.difficulty, fetchQuestions, isAuthenticated]);
 
   return { count, loading };
 };

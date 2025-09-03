@@ -2,16 +2,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Calculator, MessageSquare, FileText, Play } from "lucide-react";
+import { Calculator, MessageSquare, FileText, Play, Lock } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { useNavigate } from "react-router-dom";
 import { generateMockQuestions } from "@/mock/data";
 import { useSupabaseQuestions } from "@/hooks/useSupabaseQuestions";
+import { useAuth } from "@/hooks/useAuth";
 
 const Topics = () => {
   const { state, dispatch } = useApp();
   const navigate = useNavigate();
   const { fetchQuestions } = useSupabaseQuestions();
+  const { isAuthenticated, requireAuth } = useAuth();
   const subjects = state.analytics.performanceBySubject;
 
   const getMasteryColor = (mastery: string) => {
@@ -82,6 +84,12 @@ const Topics = () => {
                         <Button 
                           className="w-full"
                           onClick={async () => {
+                            // Check authentication first
+                            if (!isAuthenticated) {
+                              requireAuth();
+                              return;
+                            }
+
                             try {
                               const questions = await fetchQuestions({
                                 testType: state.user.selectedTest || 'SHSAT',
@@ -140,8 +148,17 @@ const Topics = () => {
                             }
                           }}
                         >
-                          <Play className="h-4 w-4 mr-2" />
-                          Practice {topic.topic}
+                          {isAuthenticated ? (
+                            <>
+                              <Play className="h-4 w-4 mr-2" />
+                              Practice {topic.topic}
+                            </>
+                          ) : (
+                            <>
+                              <Lock className="h-4 w-4 mr-2" />
+                              Login to Practice
+                            </>
+                          )}
                         </Button>
                   </CardContent>
                 </Card>

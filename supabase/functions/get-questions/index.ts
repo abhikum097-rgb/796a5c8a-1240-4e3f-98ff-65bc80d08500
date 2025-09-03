@@ -104,17 +104,17 @@ serve(async (req) => {
       console.log(`Only ${selectedQuestions.length} fresh questions found, expanding search...`);
       
       // First try without avoiding recent questions
-      const { data: allQuestions, error: allError } = await supabase
+      let allQuery = supabase
         .from('questions')
         .select('*')
         .eq('test_type', testType)
-        .eq('is_active', true)
-        .modify((query) => {
-          if (subject) query.eq('subject', subject);
-          if (topic) query.eq('topic', topic);
-          if (difficulty) query.eq('difficulty_level', difficulty);
-        })
-        .limit(count * 2);
+        .eq('is_active', true);
+
+      if (subject) allQuery = allQuery.eq('subject', subject);
+      if (topic) allQuery = allQuery.eq('topic', topic);
+      if (difficulty) allQuery = allQuery.eq('difficulty_level', difficulty);
+
+      const { data: allQuestions, error: allError } = await allQuery.limit(count * 2);
 
       if (!allError && allQuestions) {
         selectedQuestions = allQuestions;
