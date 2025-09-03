@@ -34,7 +34,8 @@ const Practice = () => {
       time: '15 min', 
       sessionType: 'mixed_review' as const,
       description: 'Short session with mixed questions',
-      allowAllFilters: true
+      allowAllFilters: true,
+      requireSubject: false
     },
     subject: { 
       name: 'Subject/Topic Focus', 
@@ -42,7 +43,8 @@ const Practice = () => {
       time: '30 min', 
       sessionType: 'subject_practice' as const,
       description: 'Focus on specific subject or topic',
-      allowAllFilters: true
+      allowAllFilters: true,
+      requireSubject: true
     },
     full: { 
       name: 'Full Practice Test', 
@@ -50,7 +52,8 @@ const Practice = () => {
       time: '2+ hours', 
       sessionType: 'full_test' as const,
       description: 'Complete practice test with all subjects',
-      allowAllFilters: false // Only test type and difficulty
+      allowAllFilters: false, // Only test type and difficulty
+      requireSubject: false
     },
     mixed: { 
       name: 'Mixed Review', 
@@ -58,7 +61,8 @@ const Practice = () => {
       time: '45 min', 
       sessionType: 'mixed_review' as const,
       description: 'Mixed questions across all topics',
-      allowAllFilters: true
+      allowAllFilters: true,
+      requireSubject: false
     }
   };
 
@@ -213,6 +217,32 @@ const Practice = () => {
     startPracticeSessionWithFilters(sessionType, questionCount);
   };
 
+  const getSubjectLabel = () => {
+    const mode = practiceModesToOptions[selectedMode];
+    if (!mode.allowAllFilters) return '(Fixed: All Subjects)';
+    if (mode.requireSubject) return '(Required)';
+    return '';
+  };
+
+  const getTopicLabel = () => {
+    const mode = practiceModesToOptions[selectedMode];
+    if (!mode.allowAllFilters) return '(Fixed: All Topics)';
+    return '';
+  };
+
+  const handleModeChange = (mode: 'quick' | 'subject' | 'full' | 'mixed') => {
+    setSelectedMode(mode);
+    // Reset subject selection when switching away from subject mode
+    if (mode !== 'subject' && selectedSubject !== 'all') {
+      setSelectedSubject('all');
+    }
+  };
+
+  const isStartDisabled = () => {
+    const mode = practiceModesToOptions[selectedMode];
+    return loading || countLoading || (mode.requireSubject && selectedSubject === 'all');
+  };
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -231,6 +261,70 @@ const Practice = () => {
         )}
       </div>
 
+      {/* Quick Start Options */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center space-x-2">
+            <Play className="h-5 w-5 text-primary" />
+            <CardTitle>Quick Start</CardTitle>
+          </div>
+          <CardDescription>
+            Jump right in with these popular practice options
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <button
+              onClick={() => startPracticeSession('mixed_review', 15)}
+              className="p-4 border rounded-lg hover:shadow-md transition-all hover:border-primary/50 hover:bg-accent text-left"
+            >
+              <div className="flex items-center space-x-2 mb-2">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                <span className="font-semibold">Quick Mix</span>
+              </div>
+              <p className="text-sm text-muted-foreground mb-2">15 mixed questions</p>
+              <p className="text-xs font-medium">~15 minutes</p>
+            </button>
+            
+            <button
+              onClick={() => startPracticeSession('subject_practice', 20)}
+              className="p-4 border rounded-lg hover:shadow-md transition-all hover:border-primary/50 hover:bg-accent text-left"
+            >
+              <div className="flex items-center space-x-2 mb-2">
+                <BookOpen className="h-5 w-5 text-primary" />
+                <span className="font-semibold">Subject Focus</span>
+              </div>
+              <p className="text-sm text-muted-foreground mb-2">20 focused questions</p>
+              <p className="text-xs font-medium">~25 minutes</p>
+            </button>
+            
+            <button
+              onClick={() => startPracticeSession('full_test', 50)}
+              className="p-4 border rounded-lg hover:shadow-md transition-all hover:border-primary/50 hover:bg-accent text-left"
+            >
+              <div className="flex items-center space-x-2 mb-2">
+                <Target className="h-5 w-5 text-primary" />
+                <span className="font-semibold">Full Test</span>
+              </div>
+              <p className="text-sm text-muted-foreground mb-2">50 comprehensive questions</p>
+              <p className="text-xs font-medium">~2 hours</p>
+            </button>
+            
+            <button
+              onClick={() => startPracticeSession('mixed_review', 30)}
+              className="p-4 border rounded-lg hover:shadow-md transition-all hover:border-primary/50 hover:bg-accent text-left"
+            >
+              <div className="flex items-center space-x-2 mb-2">
+                <Users className="h-5 w-5 text-primary" />
+                <span className="font-semibold">Extended Mix</span>
+              </div>
+              <p className="text-sm text-muted-foreground mb-2">30 varied questions</p>
+              <p className="text-xs font-medium">~45 minutes</p>
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Practice Mode Selection */}
       <Card>
         <CardHeader>
@@ -245,7 +339,7 @@ const Practice = () => {
             {Object.entries(practiceModesToOptions).map(([key, config]) => (
               <button
                 key={key}
-                onClick={() => setSelectedMode(key as any)}
+                onClick={() => handleModeChange(key as any)}
                 className={`p-4 rounded-lg border text-left transition-all hover:shadow-md ${
                   selectedMode === key
                     ? 'border-primary bg-primary/10 text-primary shadow-md'
@@ -283,7 +377,7 @@ const Practice = () => {
             
             <div>
               <label className="text-sm font-medium mb-2 block">
-                Subject {practiceModesToOptions[selectedMode].allowAllFilters ? '(Optional)' : '(Fixed: All Subjects)'}
+                Subject {getSubjectLabel()}
               </label>
               <Select 
                 value={practiceModesToOptions[selectedMode].allowAllFilters ? selectedSubject : 'all'} 
@@ -291,10 +385,12 @@ const Practice = () => {
                 disabled={!practiceModesToOptions[selectedMode].allowAllFilters}
               >
                 <SelectTrigger className={!practiceModesToOptions[selectedMode].allowAllFilters ? 'opacity-60' : ''}>
-                  <SelectValue placeholder="All subjects" />
+                  <SelectValue placeholder={practiceModesToOptions[selectedMode].requireSubject ? "Select subject" : "All subjects"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All subjects</SelectItem>
+                  {!practiceModesToOptions[selectedMode].requireSubject && (
+                    <SelectItem value="all">All subjects</SelectItem>
+                  )}
                   {subjects.map(subject => (
                     <SelectItem key={subject} value={subject}>{subject}</SelectItem>
                   ))}
@@ -304,7 +400,7 @@ const Practice = () => {
             
             <div>
               <label className="text-sm font-medium mb-2 block">
-                Topic {practiceModesToOptions[selectedMode].allowAllFilters ? '(Optional)' : '(Fixed: All Topics)'}
+                Topic {getTopicLabel()}
               </label>
               {practiceModesToOptions[selectedMode].allowAllFilters ? (
                 <TopicSelector
@@ -312,6 +408,7 @@ const Practice = () => {
                   subject={selectedSubject !== 'all' ? selectedSubject : undefined}
                   selectedTopic={selectedTopic}
                   onTopicChange={setSelectedTopic}
+                  className={practiceModesToOptions[selectedMode].requireSubject && selectedSubject === 'all' ? 'opacity-60' : ''}
                 />
               ) : (
                 <Select value="all" disabled>
@@ -326,7 +423,7 @@ const Practice = () => {
             </div>
             
             <div>
-              <label className="text-sm font-medium mb-2 block">Difficulty (Optional)</label>
+              <label className="text-sm font-medium mb-2 block">Difficulty</label>
               <Select value={selectedDifficulty} onValueChange={setSelectedDifficulty}>
                 <SelectTrigger>
                   <SelectValue placeholder="All difficulties" />
@@ -347,6 +444,14 @@ const Practice = () => {
             <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
               <div className="text-sm text-blue-800 dark:text-blue-200">
                 <strong>Full Practice Test:</strong> This mode uses questions from all subjects and topics to simulate a real test experience. Only difficulty can be customized.
+              </div>
+            </div>
+          )}
+          
+          {selectedMode === 'subject' && (
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+              <div className="text-sm text-amber-800 dark:text-amber-200">
+                <strong>Subject/Topic Focus:</strong> Select a subject to focus your practice. You can optionally narrow down to specific topics within that subject.
               </div>
             </div>
           )}
@@ -379,14 +484,19 @@ const Practice = () => {
                 </div>
                 <Button 
                   onClick={startCustomPractice}
-                  disabled={loading || countLoading}
+                  disabled={isStartDisabled()}
                   size="lg"
                   className="min-w-[180px] bg-primary hover:bg-primary/90"
                 >
                   {loading ? 'Loading...' : (
                     <div className="flex items-center space-x-2">
                       <Play className="h-4 w-4" />
-                      <span>Start Practice</span>
+                      <span>
+                        {practiceModesToOptions[selectedMode].requireSubject && selectedSubject === 'all' 
+                          ? 'Select Subject' 
+                          : 'Start Practice'
+                        }
+                      </span>
                     </div>
                   )}
                 </Button>
@@ -449,79 +559,6 @@ const Practice = () => {
           </CardContent>
         </Card>
       )}
-
-      {/* Quick Start Options */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Start Options</CardTitle>
-          <CardDescription>
-            Jump right into practice with popular configurations
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Quick Practice */}
-            <div className="p-4 border rounded-lg hover:shadow-md transition-shadow cursor-pointer" 
-                 onClick={() => startPracticeSession('mixed_review', 15)}>
-              <div className="flex items-center space-x-2 mb-2">
-                <Play className="h-4 w-4 text-primary" />
-                <div className="font-medium text-sm">Quick Practice</div>
-              </div>
-              <div className="text-xs text-muted-foreground mb-3">
-                15 questions • 15 minutes
-              </div>
-              <Button size="sm" className="w-full" disabled={loading}>
-                {loading ? 'Loading...' : 'Start'}
-              </Button>
-            </div>
-
-            {/* Subject Focus */}
-            <div className="p-4 border rounded-lg hover:shadow-md transition-shadow cursor-pointer"
-                 onClick={() => startPracticeSession('subject_practice', 25)}>
-              <div className="flex items-center space-x-2 mb-2">
-                <BookOpen className="h-4 w-4 text-primary" />
-                <div className="font-medium text-sm">Subject Focus</div>
-              </div>
-              <div className="text-xs text-muted-foreground mb-3">
-                25 questions • 30 minutes
-              </div>
-              <Button size="sm" className="w-full" disabled={loading}>
-                {loading ? 'Loading...' : 'Start'}
-              </Button>
-            </div>
-
-            {/* Full Test */}
-            <div className="p-4 border rounded-lg hover:shadow-md transition-shadow cursor-pointer"
-                 onClick={() => startPracticeSession('full_test', 50)}>
-              <div className="flex items-center space-x-2 mb-2">
-                <Target className="h-4 w-4 text-primary" />
-                <div className="font-medium text-sm">Full Practice Test</div>
-              </div>
-              <div className="text-xs text-muted-foreground mb-3">
-                50+ questions • 2+ hours
-              </div>
-              <Button size="sm" className="w-full" disabled={loading}>
-                {loading ? 'Loading...' : 'Start'}
-              </Button>
-            </div>
-
-            {/* Mixed Review */}
-            <div className="p-4 border rounded-lg hover:shadow-md transition-shadow cursor-pointer"
-                 onClick={() => startPracticeSession('mixed_review', 30)}>
-              <div className="flex items-center space-x-2 mb-2">
-                <Users className="h-4 w-4 text-primary" />
-                <div className="font-medium text-sm">Mixed Review</div>
-              </div>
-              <div className="text-xs text-muted-foreground mb-3">
-                30 questions • 45 minutes
-              </div>
-              <Button size="sm" className="w-full" disabled={loading}>
-                {loading ? 'Loading...' : 'Start'}
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Performance Overview */}
       <Card>
