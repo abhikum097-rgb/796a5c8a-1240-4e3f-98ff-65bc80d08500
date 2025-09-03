@@ -26,56 +26,110 @@ const Practice = () => {
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('all');
   const [selectedMode, setSelectedMode] = useState<'quick' | 'subject' | 'full' | 'mixed'>('quick');
   
-  // Get available question count based on current filters
-  const { count: availableQuestions, loading: countLoading } = useQuestionCount({
-    testType: selectedTestType,
-    subject: selectedSubject,
-    topic: selectedTopic,
-    difficulty: selectedDifficulty
-  });
-  
-  // Get recent practice sessions
-  const { sessions: recentSessions, loading: sessionsLoading } = useRecentPractice(3);
+  // Define practice modes with their configurations
+  const practiceModesToOptions = {
+    quick: { 
+      name: 'Quick Practice', 
+      questions: 15, 
+      time: '15 min', 
+      sessionType: 'mixed_review' as const,
+      description: 'Short session with mixed questions',
+      allowAllFilters: true
+    },
+    subject: { 
+      name: 'Subject/Topic Focus', 
+      questions: 25, 
+      time: '30 min', 
+      sessionType: 'subject_practice' as const,
+      description: 'Focus on specific subject or topic',
+      allowAllFilters: true
+    },
+    full: { 
+      name: 'Full Practice Test', 
+      questions: 50, 
+      time: '2+ hours', 
+      sessionType: 'full_test' as const,
+      description: 'Complete practice test with all subjects',
+      allowAllFilters: false // Only test type and difficulty
+    },
+    mixed: { 
+      name: 'Mixed Review', 
+      questions: 30, 
+      time: '45 min', 
+      sessionType: 'mixed_review' as const,
+      description: 'Mixed questions across all topics',
+      allowAllFilters: true
+    }
+  };
 
   const testTypes: ('SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS')[] = ['SHSAT', 'SSAT', 'ISEE', 'HSPT', 'TACHS'];
   const subjects = ['Math', 'Verbal', 'Reading'];
   const difficulties = ['Easy', 'Medium', 'Hard'];
-  
-  const practiceModesToOptions = {
-    quick: { name: 'Quick Practice', questions: 15, time: '15 min', sessionType: 'mixed_review' as const },
-    subject: { name: 'Subject Focus', questions: 25, time: '30 min', sessionType: 'subject_practice' as const },
-    full: { name: 'Full Practice Test', questions: 50, time: '2+ hours', sessionType: 'full_test' as const },
-    mixed: { name: 'Mixed Review', questions: 30, time: '45 min', sessionType: 'mixed_review' as const }
+
+  // Determine which filters to use based on practice mode
+  const getEffectiveFilters = () => {
+    const mode = practiceModesToOptions[selectedMode];
+    if (!mode.allowAllFilters) {
+      // Full Practice Test: use all subjects and topics, only allow difficulty selection
+      return {
+        testType: selectedTestType,
+        subject: 'all',
+        topic: 'all',
+        difficulty: selectedDifficulty
+      };
+    }
+    // Other modes: use selected filters
+    return {
+      testType: selectedTestType,
+      subject: selectedSubject,
+      topic: selectedTopic,
+      difficulty: selectedDifficulty
+    };
   };
+
+  const effectiveFilters = getEffectiveFilters();
+  
+  // Get available question count based on effective filters
+  const { count: availableQuestions, loading: countLoading } = useQuestionCount(effectiveFilters);
+  
+  // Get recent practice sessions
+  const { sessions: recentSessions, loading: sessionsLoading } = useRecentPractice(3);
 
   const startCustomPractice = () => {
     const modeConfig = practiceModesToOptions[selectedMode];
-    startPracticeSession(modeConfig.sessionType, modeConfig.questions);
+    const filters = getEffectiveFilters();
+    startPracticeSessionWithFilters(modeConfig.sessionType, modeConfig.questions, filters);
   };
 
-  const startPracticeSession = async (sessionType: 'full_test' | 'subject_practice' | 'topic_practice' | 'mixed_review', questionCount: number) => {
+  const startPracticeSessionWithFilters = async (
+    sessionType: 'full_test' | 'subject_practice' | 'topic_practice' | 'mixed_review', 
+    questionCount: number,
+    filterOverrides?: any
+  ) => {
     // Check authentication for database access
     if (!requireAuth()) {
       return;
     }
 
+    const filtersToUse = filterOverrides || getEffectiveFilters();
+
     try {
-      console.log('Starting practice session with:', { sessionType, questionCount, selectedTestType, selectedSubject, selectedDifficulty });
+      console.log('Starting practice session with:', { sessionType, questionCount, filters: filtersToUse });
       
       const filters: any = {
-        testType: selectedTestType,
+        testType: filtersToUse.testType,
         count: questionCount,
         avoidRecent: true
       };
 
-      if (selectedSubject && selectedSubject !== 'all') {
-        filters.subject = selectedSubject;
+      if (filtersToUse.subject && filtersToUse.subject !== 'all') {
+        filters.subject = filtersToUse.subject;
       }
-      if (selectedTopic && selectedTopic !== 'all') {
-        filters.topic = selectedTopic;
+      if (filtersToUse.topic && filtersToUse.topic !== 'all') {
+        filters.topic = filtersToUse.topic;
       }
-      if (selectedDifficulty && selectedDifficulty !== 'all') {
-        filters.difficulty = selectedDifficulty;
+      if (filtersToUse.difficulty && filtersToUse.difficulty !== 'all') {
+        filters.difficulty = filtersToUse.difficulty;
       }
 
       console.log('Fetching questions with filters:', filters);
@@ -90,8 +144,8 @@ const Practice = () => {
         const mockQuestions = generateMockQuestions(
           questionCount - questions.length,
           {
-            subject: selectedSubject !== 'all' ? selectedSubject : undefined,
-            difficulty: selectedDifficulty !== 'all' ? selectedDifficulty : undefined
+            subject: filtersToUse.subject !== 'all' ? filtersToUse.subject : undefined,
+            difficulty: filtersToUse.difficulty !== 'all' ? filtersToUse.difficulty : undefined
           }
         );
         finalQuestions = [...questions, ...mockQuestions];
@@ -102,10 +156,10 @@ const Practice = () => {
         dispatch({
           type: 'START_SESSION',
           payload: {
-            testType: selectedTestType,
+            testType: filtersToUse.testType as 'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS',
             sessionType,
-            subject: (selectedSubject !== 'all' ? selectedSubject : 'Math') as 'Math' | 'Verbal' | 'Reading',
-            topic: 'General Practice',
+            subject: (filtersToUse.subject !== 'all' ? filtersToUse.subject : 'Math') as 'Math' | 'Verbal' | 'Reading',
+            topic: filtersToUse.topic !== 'all' ? filtersToUse.topic : 'General Practice',
             questions: finalQuestions
           }
         });
@@ -115,17 +169,17 @@ const Practice = () => {
         // Fallback to mock questions if database is completely empty
         console.log('Falling back to mock questions');
         const mockQuestions = generateMockQuestions(questionCount, {
-          subject: selectedSubject !== 'all' ? selectedSubject : undefined,
-          difficulty: selectedDifficulty !== 'all' ? selectedDifficulty : undefined
+          subject: filtersToUse.subject !== 'all' ? filtersToUse.subject : undefined,
+          difficulty: filtersToUse.difficulty !== 'all' ? filtersToUse.difficulty : undefined
         });
         
         dispatch({
           type: 'START_SESSION',
           payload: {
-            testType: selectedTestType,
+            testType: filtersToUse.testType as 'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS',
             sessionType,
-            subject: (selectedSubject !== 'all' ? selectedSubject : 'Math') as 'Math' | 'Verbal' | 'Reading',
-            topic: 'General Practice',
+            subject: (filtersToUse.subject !== 'all' ? filtersToUse.subject : 'Math') as 'Math' | 'Verbal' | 'Reading',
+            topic: filtersToUse.topic !== 'all' ? filtersToUse.topic : 'General Practice',
             questions: mockQuestions
           }
         });
@@ -136,22 +190,27 @@ const Practice = () => {
       // Fallback to mock questions on error
       console.log('Error occurred, falling back to mock questions');
       const mockQuestions = generateMockQuestions(questionCount, {
-        subject: selectedSubject !== 'all' ? selectedSubject : undefined,
-        difficulty: selectedDifficulty !== 'all' ? selectedDifficulty : undefined
+        subject: filtersToUse.subject !== 'all' ? filtersToUse.subject : undefined,
+        difficulty: filtersToUse.difficulty !== 'all' ? filtersToUse.difficulty : undefined
       });
       
       dispatch({
         type: 'START_SESSION',
         payload: {
-          testType: selectedTestType,
+          testType: filtersToUse.testType as 'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS',
           sessionType,
-          subject: (selectedSubject !== 'all' ? selectedSubject : 'Math') as 'Math' | 'Verbal' | 'Reading',
-          topic: 'General Practice',
+          subject: (filtersToUse.subject !== 'all' ? filtersToUse.subject : 'Math') as 'Math' | 'Verbal' | 'Reading',
+          topic: filtersToUse.topic !== 'all' ? filtersToUse.topic : 'General Practice',
           questions: mockQuestions
         }
       });
       navigate(`/dashboard/practice/session/${Date.now()}`);
     }
+  };
+
+  // Legacy function for quick start options
+  const startPracticeSession = (sessionType: 'full_test' | 'subject_practice' | 'topic_practice' | 'mixed_review', questionCount: number) => {
+    startPracticeSessionWithFilters(sessionType, questionCount);
   };
 
   return (
@@ -172,16 +231,42 @@ const Practice = () => {
         )}
       </div>
 
-      {/* Practice Options */}
+      {/* Practice Mode Selection */}
       <Card>
         <CardHeader>
-          <CardTitle>Customize Your Practice</CardTitle>
+          <CardTitle>Choose Your Practice Mode</CardTitle>
           <CardDescription>
-            Select test type, subject, and difficulty to personalize your practice session
+            Select how you want to practice - this will determine available options
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Practice Mode Selection */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {Object.entries(practiceModesToOptions).map(([key, config]) => (
+              <button
+                key={key}
+                onClick={() => setSelectedMode(key as any)}
+                className={`p-4 rounded-lg border text-left transition-all hover:shadow-md ${
+                  selectedMode === key
+                    ? 'border-primary bg-primary/10 text-primary shadow-md'
+                    : 'border-border hover:border-primary/50 hover:bg-accent'
+                }`}
+              >
+                <div className="font-semibold text-base mb-1">{config.name}</div>
+                <div className="text-sm text-muted-foreground mb-2">
+                  {config.description}
+                </div>
+                <div className="text-xs font-medium">
+                  {config.questions} questions • {config.time}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Filter Options */}
+          <div className="border-t pt-6">
+            <h3 className="text-lg font-semibold mb-4">Customize Filters</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="text-sm font-medium mb-2 block">Test Type</label>
               <Select value={selectedTestType} onValueChange={(value) => setSelectedTestType(value as 'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS')}>
@@ -197,9 +282,15 @@ const Practice = () => {
             </div>
             
             <div>
-              <label className="text-sm font-medium mb-2 block">Subject (Optional)</label>
-              <Select value={selectedSubject} onValueChange={setSelectedSubject}>
-                <SelectTrigger>
+              <label className="text-sm font-medium mb-2 block">
+                Subject {practiceModesToOptions[selectedMode].allowAllFilters ? '(Optional)' : '(Fixed: All Subjects)'}
+              </label>
+              <Select 
+                value={practiceModesToOptions[selectedMode].allowAllFilters ? selectedSubject : 'all'} 
+                onValueChange={setSelectedSubject}
+                disabled={!practiceModesToOptions[selectedMode].allowAllFilters}
+              >
+                <SelectTrigger className={!practiceModesToOptions[selectedMode].allowAllFilters ? 'opacity-60' : ''}>
                   <SelectValue placeholder="All subjects" />
                 </SelectTrigger>
                 <SelectContent>
@@ -211,12 +302,28 @@ const Practice = () => {
               </Select>
             </div>
             
-            <TopicSelector
-              testType={selectedTestType}
-              subject={selectedSubject !== 'all' ? selectedSubject : undefined}
-              selectedTopic={selectedTopic}
-              onTopicChange={setSelectedTopic}
-            />
+            <div>
+              <label className="text-sm font-medium mb-2 block">
+                Topic {practiceModesToOptions[selectedMode].allowAllFilters ? '(Optional)' : '(Fixed: All Topics)'}
+              </label>
+              {practiceModesToOptions[selectedMode].allowAllFilters ? (
+                <TopicSelector
+                  testType={selectedTestType}
+                  subject={selectedSubject !== 'all' ? selectedSubject : undefined}
+                  selectedTopic={selectedTopic}
+                  onTopicChange={setSelectedTopic}
+                />
+              ) : (
+                <Select value="all" disabled>
+                  <SelectTrigger className="opacity-60">
+                    <SelectValue placeholder="All topics" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All topics</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
             
             <div>
               <label className="text-sm font-medium mb-2 block">Difficulty (Optional)</label>
@@ -232,55 +339,56 @@ const Practice = () => {
                 </SelectContent>
               </Select>
             </div>
+            </div>
           </div>
-          
-          {/* Practice Mode Selection */}
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">Practice Mode</label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {Object.entries(practiceModesToOptions).map(([key, config]) => (
-                  <button
-                    key={key}
-                    onClick={() => setSelectedMode(key as any)}
-                    className={`p-3 rounded-lg border text-left transition-colors ${
-                      selectedMode === key
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border hover:border-primary/50 hover:bg-accent'
-                    }`}
-                  >
-                    <div className="font-medium text-sm">{config.name}</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {config.questions} questions • {config.time}
-                    </div>
-                  </button>
-                ))}
+
+          {/* Mode-specific information */}
+          {selectedMode === 'full' && (
+            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="text-sm text-blue-800 dark:text-blue-200">
+                <strong>Full Practice Test:</strong> This mode uses questions from all subjects and topics to simulate a real test experience. Only difficulty can be customized.
               </div>
             </div>
-            
+          )}
+          
+          <div className="space-y-4">
             {/* Available Questions & Start Button */}
-            <div className="bg-accent/50 rounded-lg p-4">
+            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20 rounded-lg p-6">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="text-sm">
-                    <span className="text-muted-foreground">Available questions: </span>
-                    <span className="font-medium text-foreground">
-                      {countLoading ? 'Loading...' : `${availableQuestions} questions`}
-                    </span>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-3">
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">Available questions: </span>
+                      <span className="font-semibold text-foreground">
+                        {countLoading ? 'Loading...' : `${availableQuestions} questions`}
+                      </span>
+                    </div>
+                    {availableQuestions < practiceModesToOptions[selectedMode].questions && (
+                      <Badge variant="outline" className="text-xs">
+                        Will use mock questions
+                      </Badge>
+                    )}
                   </div>
-                  {availableQuestions < practiceModesToOptions[selectedMode].questions && (
-                    <Badge variant="outline" className="text-xs">
-                      Will use mock questions
-                    </Badge>
-                  )}
+                  <div className="text-xs text-muted-foreground">
+                    Mode: {practiceModesToOptions[selectedMode].name} • 
+                    {effectiveFilters.subject !== 'all' && ` Subject: ${effectiveFilters.subject} •`}
+                    {effectiveFilters.topic !== 'all' && ` Topic: ${effectiveFilters.topic} •`}
+                    {effectiveFilters.difficulty !== 'all' && ` Difficulty: ${effectiveFilters.difficulty} •`}
+                    {` ${practiceModesToOptions[selectedMode].questions} questions`}
+                  </div>
                 </div>
                 <Button 
                   onClick={startCustomPractice}
                   disabled={loading || countLoading}
                   size="lg"
-                  className="min-w-[140px]"
+                  className="min-w-[180px] bg-primary hover:bg-primary/90"
                 >
-                  {loading ? 'Loading...' : `Start ${practiceModesToOptions[selectedMode].name}`}
+                  {loading ? 'Loading...' : (
+                    <div className="flex items-center space-x-2">
+                      <Play className="h-4 w-4" />
+                      <span>Start Practice</span>
+                    </div>
+                  )}
                 </Button>
               </div>
             </div>
