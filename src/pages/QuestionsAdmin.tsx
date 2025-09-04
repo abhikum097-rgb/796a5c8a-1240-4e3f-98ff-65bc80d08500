@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle, XCircle, Upload, FileText, Images, List, Download, AlertCircle } from 'lucide-react';
+import { CheckCircle, XCircle, Upload, FileText, Images, List, Download, AlertCircle, Info } from 'lucide-react';
+import { AdminInventoryWidget } from '@/components/AdminInventoryWidget';
 
 const QUESTION_PROCESSING_PROMPT = `
 You are an expert test prep question parser. Convert the provided question text into a structured JSON format.
@@ -143,6 +144,35 @@ const QuestionsAdmin = () => {
     }
   };
 
+  const safeJsonParse = (jsonStr: string): any => {
+    try {
+      // First try standard JSON parse
+      return JSON.parse(jsonStr);
+    } catch (error) {
+      // Try to extract JSON from markdown code blocks
+      const codeBlockMatch = jsonStr.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (codeBlockMatch) {
+        try {
+          return JSON.parse(codeBlockMatch[1]);
+        } catch (e) {
+          // Continue to next fallback
+        }
+      }
+      
+      // Try to find JSON object in the response
+      const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          return JSON.parse(jsonMatch[0]);
+        } catch (e) {
+          // Continue to next fallback
+        }
+      }
+      
+      throw new Error(`Invalid JSON response: ${error instanceof Error ? error.message : 'Unknown JSON error'}`);
+    }
+  };
+
   const processTextQuestion = async (questionText: string): Promise<ProcessingResult> => {
     try {
       const response = await supabase.functions.invoke('process-question', {
@@ -154,7 +184,15 @@ const QuestionsAdmin = () => {
 
       if (response.error) throw new Error(response.error.message);
 
-      const questionData = JSON.parse(response.data.content);
+      const questionData = safeJsonParse(response.data.content);
+      
+      // Validate required fields
+      const requiredFields = ['test_type', 'subject', 'topic', 'difficulty_level', 'question_text', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer', 'explanation'];
+      const missingFields = requiredFields.filter(field => !questionData[field]);
+      
+      if (missingFields.length > 0) {
+        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+      }
       
       // Merge with user metadata if provided
       const finalQuestion = {
@@ -186,8 +224,26 @@ const QuestionsAdmin = () => {
 
       if (response.error) throw new Error(response.error.message);
 
-      const questionData = JSON.parse(response.data.content);
-      return await saveQuestionToDatabase(questionData);
+      const questionData = safeJsonParse(response.data.content);
+      
+      // Validate required fields
+      const requiredFields = ['test_type', 'subject', 'topic', 'difficulty_level', 'question_text', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer', 'explanation'];
+      const missingFields = requiredFields.filter(field => !questionData[field]);
+      
+      if (missingFields.length > 0) {
+        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+      }
+      
+      // Merge with user metadata if provided
+      const finalQuestion = {
+        ...questionData,
+        ...(metadata.test_type && { test_type: metadata.test_type }),
+        ...(metadata.subject && { subject: metadata.subject }),
+        ...(metadata.topic && { topic: metadata.topic }),
+        ...(metadata.difficulty_level && { difficulty_level: metadata.difficulty_level })
+      };
+
+      return await saveQuestionToDatabase(finalQuestion);
     } catch (error: any) {
       console.error('Image processing failed:', error);
       return { success: false, error: error.message };
@@ -195,32 +251,56 @@ const QuestionsAdmin = () => {
   };
 
   const processBulkQuestions = async (bulkText: string): Promise<ProcessingResult[]> => {
-    const questions = bulkText.split('\n\n').filter(q => q.trim());
+    const questions = bulkText.split(/\n\s*\n/).filter(q => q.trim());
     const results: ProcessingResult[] = [];
     
-    for (const questionText of questions) {
-      const result = await processTextQuestion(questionText);
-      results.push(result);
+    console.log(`Processing ${questions.length} questions from bulk text`);
+    
+    for (let i = 0; i < questions.length; i++) {
+      const questionText = questions[i];
+      console.log(`Processing question ${i + 1}/${questions.length}`);
+      
+      try {
+        const result = await processTextQuestion(questionText);
+        results.push({
+          ...result,
+          data: { ...result.data, questionNumber: i + 1, questionPreview: questionText.substring(0, 100) + '...' }
+        });
+      } catch (error: any) {
+        console.error(`Error processing question ${i + 1}:`, error);
+        results.push({
+          success: false,
+          error: `Question ${i + 1}: ${error.message}`,
+          data: { questionNumber: i + 1, questionPreview: questionText.substring(0, 100) + '...' }
+        });
+      }
     }
     
     return results;
   };
 
   const parseCsvFile = (content: string): any[] => {
-    const lines = content.split('\n').filter(line => line.trim());
-    if (lines.length < 2) return [];
+    try {
+      const lines = content.split('\n').filter(line => line.trim());
+      if (lines.length < 2) return [];
 
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-    const questions = lines.slice(1).map(line => {
-      const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
-      const question: any = {};
-      headers.forEach((header, index) => {
-        question[header] = values[index] || '';
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+      const questions = lines.slice(1).map(line => {
+        // Handle CSV with quoted fields that may contain commas
+        const values = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+        const question: any = {};
+        headers.forEach((header, index) => {
+          const value = values[index] || '';
+          question[header] = value.replace(/^"|"$/g, '').trim();
+        });
+        return question;
       });
-      return question;
-    });
 
-    return questions;
+      return questions;
+    } catch (error) {
+      console.error('CSV parsing error:', error);
+      throw new Error('Failed to parse CSV file. Please check the format.');
+    }
   };
 
   const processBulkFile = async (file: File): Promise<void> => {
@@ -231,8 +311,12 @@ const QuestionsAdmin = () => {
       if (file.name.toLowerCase().endsWith('.csv')) {
         questions = parseCsvFile(content);
       } else if (file.name.toLowerCase().endsWith('.json')) {
-        const parsed = JSON.parse(content);
-        questions = Array.isArray(parsed) ? parsed : [parsed];
+        try {
+          const parsed = JSON.parse(content);
+          questions = Array.isArray(parsed) ? parsed : [parsed];
+        } catch (jsonError) {
+          throw new Error('Invalid JSON format. Please check your file.');
+        }
       } else {
         throw new Error('Unsupported file format. Please use CSV or JSON.');
       }
@@ -343,8 +427,10 @@ SSAT,Verbal,Vocabulary,Synonyms,Easy,"Choose the word that means the same as HAP
     window.URL.revokeObjectURL(url);
   };
 
+  const hasMetadata = metadata.test_type || metadata.subject || metadata.topic || metadata.difficulty_level;
+
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
+    <div className="max-w-6xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Questions Admin Dashboard</h1>
         <div className="text-sm text-muted-foreground">
@@ -352,14 +438,23 @@ SSAT,Verbal,Vocabulary,Synonyms,Easy,"Choose the word that means the same as HAP
         </div>
       </div>
 
-      {/* Metadata Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Question Metadata</CardTitle>
-          <CardDescription>
-            Set default values for all questions (can be overridden by AI)
-          </CardDescription>
-        </CardHeader>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+
+        {/* Metadata Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Question Metadata</CardTitle>
+            <CardDescription className="flex items-center gap-2">
+              Set default values for all questions (can be overridden by AI)
+              {!hasMetadata && (
+                <div className="flex items-center gap-1 text-amber-600">
+                  <Info className="h-4 w-4" />
+                  <span className="text-xs">AI will infer metadata if left blank</span>
+                </div>
+              )}
+            </CardDescription>
+          </CardHeader>
         <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <Label htmlFor="test-type">Test Type</Label>
@@ -415,17 +510,17 @@ SSAT,Verbal,Vocabulary,Synonyms,Easy,"Choose the word that means the same as HAP
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* Input Methods */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Question Input</CardTitle>
-          <CardDescription>
-            Choose how you want to input questions for AI processing
-          </CardDescription>
-        </CardHeader>
+        {/* Input Methods */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Question Input</CardTitle>
+            <CardDescription>
+              Choose how you want to input questions for AI processing
+            </CardDescription>
+          </CardHeader>
         <CardContent>
           <Tabs defaultValue="text" className="space-y-4">
             <TabsList className="grid w-full grid-cols-4">
@@ -482,15 +577,43 @@ SSAT,Verbal,Vocabulary,Synonyms,Easy,"Choose the word that means the same as HAP
             </TabsContent>
 
             <TabsContent value="bulk" className="space-y-4">
-              <Label htmlFor="bulk-input">Bulk Questions (Text)</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="bulk-input">Bulk Questions (Text)</Label>
+                <div className="text-xs text-muted-foreground">
+                  Separate questions with blank lines
+                </div>
+              </div>
               <Textarea
                 id="bulk-input"
                 rows={15}
-                placeholder="Paste multiple questions separated by blank lines..."
+                placeholder="Paste multiple questions separated by blank lines...
+
+Example:
+What is 2 + 2?
+A) 3
+B) 4
+C) 5
+D) 6
+
+The capital of France is:
+A) Berlin
+B) Madrid
+C) Paris
+D) Rome"
                 value={bulkInput}
                 onChange={(e) => setBulkInput(e.target.value)}
                 className="resize-none"
               />
+              {!hasMetadata && (
+                <div className="bg-amber-50 dark:bg-amber-950 p-3 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5" />
+                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                      AI will automatically infer test type, subject, topic, and difficulty for each question since no metadata is set above.
+                    </p>
+                  </div>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="file" className="space-y-4">
@@ -577,10 +700,10 @@ SSAT,Verbal,Vocabulary,Synonyms,Easy,"Choose the word that means the same as HAP
             </TabsContent>
           </Tabs>
         </CardContent>
-      </Card>
+        </Card>
 
-      {/* Actions */}
-      <div className="flex gap-4">
+        {/* Actions */}
+        <div className="flex gap-4">
         <Button 
           onClick={handleProcess} 
           disabled={isProcessing || (!textInput.trim() && !imageFile && !bulkInput.trim() && !csvFile && !jsonFile)}
@@ -598,10 +721,10 @@ SSAT,Verbal,Vocabulary,Synonyms,Easy,"Choose the word that means the same as HAP
         <Button variant="secondary" onClick={clearForm}>
           Clear
         </Button>
-      </div>
+        </div>
 
-      {/* Bulk Import Results */}
-      {bulkResults && (
+        {/* Bulk Import Results */}
+        {bulkResults && (
         <Card>
           <CardHeader>
             <CardTitle>Bulk Import Results</CardTitle>
@@ -646,11 +769,11 @@ SSAT,Verbal,Vocabulary,Synonyms,Easy,"Choose the word that means the same as HAP
               </div>
             )}
           </CardContent>
-        </Card>
-      )}
+          </Card>
+        )}
 
-      {/* Individual Processing Results Display */}
-      {results.length > 0 && (
+        {/* Individual Processing Results Display */}
+        {results.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Processing Results</CardTitle>
@@ -687,8 +810,16 @@ SSAT,Verbal,Vocabulary,Synonyms,Easy,"Choose the word that means the same as HAP
               </div>
             ))}
           </CardContent>
-        </Card>
-      )}
+          </Card>
+        )}
+
+        </div>
+
+        {/* Right Column - Admin Inventory */}
+        <div className="space-y-6">
+          <AdminInventoryWidget />
+        </div>
+      </div>
     </div>
   );
 };
