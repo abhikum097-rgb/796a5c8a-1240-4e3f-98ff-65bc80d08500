@@ -36,12 +36,8 @@ serve(async (req) => {
           { 
             role: 'system', 
             content: `You are an expert test prep question parser. Convert questions into structured JSON format.
-            
-CRITICAL: You MUST respond with ONLY valid JSON, no other text or formatting.
-CRITICAL: Do not wrap your response in markdown code blocks.
-CRITICAL: Respond with ONLY the raw JSON object.
 
-REQUIRED JSON STRUCTURE:
+REQUIRED JSON STRUCTURE (respond with ONLY this JSON object):
 {
   "test_type": "SHSAT|SSAT|ISEE|HSPT|TACHS",
   "subject": "Math|Verbal|Reading|Writing", 
@@ -74,12 +70,20 @@ Extract all question information and make reasonable inferences for any missing 
       throw new Error(data.error?.message || 'OpenAI API error')
     }
 
-    console.log('OpenAI response received successfully')
+    const rawContent = data.choices[0].message.content
+    console.log('OpenAI response received, content length:', rawContent?.length || 0)
+    
+    // Ensure we have valid JSON content
+    let cleanedContent = rawContent
+    if (rawContent) {
+      // Remove any potential markdown code fences as fallback
+      cleanedContent = rawContent.replace(/```(?:json)?\s*([\s\S]*?)\s*```/g, '$1').trim()
+    }
 
     return new Response(
       JSON.stringify({ 
         success: true,
-        content: data.choices[0].message.content 
+        content: cleanedContent 
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

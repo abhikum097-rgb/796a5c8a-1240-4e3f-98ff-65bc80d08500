@@ -279,27 +279,83 @@ const QuestionsAdmin = () => {
     return results;
   };
 
-  const parseCsvFile = (content: string): any[] => {
+  const parseCsvRow = (row: string): string[] => {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < row.length; i++) {
+      const char = row[i];
+      const nextChar = row[i + 1];
+      
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          // Escaped quote
+          current += '"';
+          i++; // Skip next quote
+        } else {
+          // Toggle quote state
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        // Field separator
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    
+    // Add the last field
+    result.push(current.trim());
+    return result;
+  };
+
+  const parseCsvFile = (content: string): { questions: any[], errors: string[] } => {
     try {
       const lines = content.split('\n').filter(line => line.trim());
-      if (lines.length < 2) return [];
+      if (lines.length < 2) {
+        return { questions: [], errors: ['CSV file must have at least a header row and one data row'] };
+      }
 
-      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-      const questions = lines.slice(1).map(line => {
-        // Handle CSV with quoted fields that may contain commas
-        const values = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
-        const question: any = {};
-        headers.forEach((header, index) => {
-          const value = values[index] || '';
-          question[header] = value.replace(/^"|"$/g, '').trim();
-        });
-        return question;
+      const headers = parseCsvRow(lines[0]).map(h => h.replace(/^"|"$/g, '').trim());
+      const questions: any[] = [];
+      const errors: string[] = [];
+      
+      const requiredFields = ['test_type', 'subject', 'topic', 'difficulty_level', 'question_text', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer', 'explanation'];
+      const missingHeaders = requiredFields.filter(field => !headers.includes(field));
+      
+      if (missingHeaders.length > 0) {
+        errors.push(`Missing required columns: ${missingHeaders.join(', ')}`);
+        return { questions: [], errors };
+      }
+
+      lines.slice(1).forEach((line, index) => {
+        try {
+          const values = parseCsvRow(line);
+          const question: any = {};
+          
+          headers.forEach((header, headerIndex) => {
+            const value = values[headerIndex] || '';
+            question[header] = value.replace(/^"|"$/g, '').trim();
+          });
+          
+          // Validate required fields for this row
+          const missingFields = requiredFields.filter(field => !question[field] || question[field].trim() === '');
+          if (missingFields.length > 0) {
+            errors.push(`Row ${index + 2}: Missing ${missingFields.join(', ')}`);
+          } else {
+            questions.push(question);
+          }
+        } catch (rowError) {
+          errors.push(`Row ${index + 2}: Failed to parse - ${rowError}`);
+        }
       });
 
-      return questions;
+      return { questions, errors: errors.slice(0, 10) }; // Limit to first 10 errors
     } catch (error) {
       console.error('CSV parsing error:', error);
-      throw new Error('Failed to parse CSV file. Please check the format.');
+      return { questions: [], errors: [`Failed to parse CSV file: ${error instanceof Error ? error.message : 'Unknown error'}`] };
     }
   };
 
@@ -307,25 +363,51 @@ const QuestionsAdmin = () => {
     try {
       const content = await file.text();
       let questions: any[] = [];
+      let validationErrors: string[] = [];
 
       if (file.name.toLowerCase().endsWith('.csv')) {
-        questions = parseCsvFile(content);
+        const result = parseCsvFile(content);
+        questions = result.questions;
+        validationErrors = result.errors;
+        
+        if (validationErrors.length > 0) {
+          const errorMessage = `CSV validation errors:\n${validationErrors.join('\n')}`;
+          throw new Error(errorMessage);
+        }
       } else if (file.name.toLowerCase().endsWith('.json')) {
         try {
           const parsed = JSON.parse(content);
-          questions = Array.isArray(parsed) ? parsed : [parsed];
+          const rawQuestions = Array.isArray(parsed) ? parsed : [parsed];
+          
+          // Validate JSON structure
+          const requiredFields = ['test_type', 'subject', 'topic', 'difficulty_level', 'question_text', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer', 'explanation'];
+          
+          rawQuestions.forEach((question, index) => {
+            const missingFields = requiredFields.filter(field => !question[field]);
+            if (missingFields.length > 0) {
+              validationErrors.push(`Question ${index + 1}: Missing ${missingFields.join(', ')}`);
+            } else {
+              questions.push(question);
+            }
+          });
+          
+          if (validationErrors.length > 0 && validationErrors.length < 10) {
+            // Show first 10 validation errors
+            const errorMessage = `JSON validation errors:\n${validationErrors.slice(0, 10).join('\n')}`;
+            throw new Error(errorMessage);
+          }
         } catch (jsonError) {
-          throw new Error('Invalid JSON format. Please check your file.');
+          throw new Error('Invalid JSON format. Please check your file structure.');
         }
       } else {
         throw new Error('Unsupported file format. Please use CSV or JSON.');
       }
 
       if (questions.length === 0) {
-        throw new Error('No valid questions found in file');
+        throw new Error('No valid questions found in file after validation');
       }
 
-      console.log(`Processing ${questions.length} questions from file`);
+      console.log(`Processing ${questions.length} valid questions from file`);
 
       const response = await supabase.functions.invoke('bulk-import-questions', {
         body: {
@@ -342,7 +424,7 @@ const QuestionsAdmin = () => {
       
       toast({
         title: "Bulk Import Completed",
-        description: response.data.message,
+        description: `${response.data.message}${validationErrors.length > 0 ? ` (${validationErrors.length} validation warnings)` : ''}`,
       });
 
     } catch (error: any) {
@@ -583,34 +665,58 @@ SSAT,Verbal,Vocabulary,Synonyms,Easy,"Choose the word that means the same as HAP
                   Separate questions with blank lines
                 </div>
               </div>
+              
+              {/* Formatting Tips */}
+              <div className="bg-blue-50 dark:bg-blue-950 p-3 rounded-lg">
+                <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">Formatting Tips for Best Results:</h4>
+                <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
+                  <li>• <strong>Separate each question with one blank line</strong></li>
+                  <li>• Label options clearly as A), B), C), D) or A:, B:, C:, D:</li>
+                  <li>• Include "Answer: B" or "Correct: B" if you know it</li>
+                  <li>• Add "Explanation: ..." for detailed reasoning</li>
+                  <li>• AI will infer missing test type, subject, topic, and difficulty</li>
+                </ul>
+              </div>
+              
               <Textarea
                 id="bulk-input"
                 rows={15}
                 placeholder="Paste multiple questions separated by blank lines...
 
-Example:
+Example Format:
+
 What is 2 + 2?
 A) 3
 B) 4
 C) 5
 D) 6
+Answer: B
+Explanation: 2 + 2 equals 4 by basic addition.
 
 The capital of France is:
 A) Berlin
-B) Madrid
+B) Madrid  
 C) Paris
-D) Rome"
+D) Rome
+Answer: C
+Explanation: Paris is the capital and largest city of France."
                 value={bulkInput}
                 onChange={(e) => setBulkInput(e.target.value)}
                 className="resize-none"
               />
+              
               {!hasMetadata && (
                 <div className="bg-amber-50 dark:bg-amber-950 p-3 rounded-lg">
                   <div className="flex items-start gap-2">
                     <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5" />
-                    <p className="text-sm text-amber-800 dark:text-amber-200">
-                      AI will automatically infer test type, subject, topic, and difficulty for each question since no metadata is set above.
-                    </p>
+                    <div>
+                      <p className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-1">
+                        Using AI to infer metadata
+                      </p>
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                        AI will automatically determine test type, subject, topic, and difficulty for each question. Set defaults above to override this behavior.
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}
@@ -774,42 +880,67 @@ D) Rome"
 
         {/* Individual Processing Results Display */}
         {results.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Processing Results</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {results.map((result, index) => (
-              <div
-                key={index}
-                className={`p-4 rounded-lg border ${
-                  result.success 
-                    ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800' 
-                    : 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'
-                }`}
-              >
-                {result.success ? (
-                  <div>
-                    <div className="flex items-center text-green-800 dark:text-green-200">
-                      <CheckCircle className="w-5 h-5 mr-2" />
-                      Question processed successfully
-                    </div>
-                    {result.data && (
-                      <div className="mt-2 text-sm text-muted-foreground">
-                        <strong>Topic:</strong> {result.data.topic} | 
-                        <strong>Difficulty:</strong> {result.data.difficulty_level}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Processing Results
+                <div className="flex gap-2">
+                  <div className="flex items-center gap-1 text-sm">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <span>{results.filter(r => r.success).length} Success</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-sm">
+                    <XCircle className="h-4 w-4 text-red-600" />
+                    <span>{results.filter(r => !r.success).length} Failed</span>
+                  </div>
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {results.map((result, index) => (
+                  <div
+                    key={index}
+                    className={`p-3 rounded-lg border ${
+                      result.success
+                        ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800'
+                        : 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      {result.success ? (
+                        <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
+                      ) : (
+                        <XCircle className="h-5 w-5 text-red-600 mt-0.5" />
+                      )}
+                      <div className="flex-1">
+                        <div className="text-sm font-medium">
+                          {result.data?.questionNumber && `Question #${result.data.questionNumber}: `}
+                          {result.success ? 'Successfully processed' : 'Processing failed'}
+                        </div>
+                        {result.error && (
+                          <div className="text-sm text-red-600 dark:text-red-400 mt-1">
+                            {result.error}
+                          </div>
+                        )}
+                        {result.data?.questionPreview && (
+                          <div className="text-xs text-muted-foreground mt-1 p-2 bg-muted/50 rounded">
+                            <strong>Question preview:</strong> {result.data.questionPreview}
+                          </div>
+                        )}
+                        {result.data && result.success && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {result.data.test_type && `${result.data.test_type} • `}
+                            {result.data.subject && `${result.data.subject} • `}
+                            {result.data.topic && result.data.topic}
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
-                ) : (
-                  <div className="text-red-800 dark:text-red-200">
-                    <XCircle className="w-5 h-5 mr-2 inline" />
-                    Processing failed: {result.error}
-                  </div>
-                )}
+                ))}
               </div>
-            ))}
-          </CardContent>
+            </CardContent>
           </Card>
         )}
 
