@@ -14,13 +14,23 @@ serve(async (req) => {
   }
 
   try {
+    // Get authenticated user first
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.error('No Authorization header provided');
+      throw new Error('Authorization header required');
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        global: {
+          headers: { Authorization: authHeader }
+        }
+      }
     );
 
-    // Get authenticated user
-    const authHeader = req.headers.get('Authorization')!;
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
