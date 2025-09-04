@@ -12,7 +12,10 @@ interface QuestionStats {
   question_count: number;
 }
 
-export const AdminInventoryWidget = () => {
+export const AdminInventoryWidget = React.forwardRef<
+  { refreshStats: () => void },
+  {}
+>((props, ref) => {
   const [stats, setStats] = useState<QuestionStats[]>([]);
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -20,6 +23,11 @@ export const AdminInventoryWidget = () => {
   useEffect(() => {
     fetchQuestionStats();
   }, []);
+
+  // Expose refresh function to parent via ref
+  React.useImperativeHandle(ref, () => ({
+    refreshStats: fetchQuestionStats
+  }));
 
   const fetchQuestionStats = async () => {
     try {
@@ -172,4 +180,4 @@ export const AdminInventoryWidget = () => {
       </CardContent>
     </Card>
   );
-};
+});

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,8 +10,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle, XCircle, Upload, FileText, Images, List, Download, AlertCircle, Info } from 'lucide-react';
+import { CheckCircle, XCircle, Upload, FileText, Images, List, Download, AlertCircle, Info, Play, Database } from 'lucide-react';
 import { AdminInventoryWidget } from '@/components/AdminInventoryWidget';
+import { useNavigate } from 'react-router-dom';
 
 const QUESTION_PROCESSING_PROMPT = `
 You are an expert test prep question parser. Convert the provided question text into a structured JSON format.
@@ -57,6 +58,8 @@ interface ProcessingResult {
 const QuestionsAdmin = () => {
   const { isAdmin, loading: adminLoading } = useAdminAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const inventoryWidgetRef = useRef<{ refreshStats: () => void }>(null);
 
   const [metadata, setMetadata] = useState({
     test_type: '',
@@ -75,6 +78,8 @@ const QuestionsAdmin = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [results, setResults] = useState<ProcessingResult[]>([]);
   const [bulkResults, setBulkResults] = useState<any>(null);
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [verifyingQuestions, setVerifyingQuestions] = useState(false);
 
   if (adminLoading) {
     return (
@@ -466,6 +471,9 @@ const QuestionsAdmin = () => {
         description: `${response.data.message}${validationErrors.length > 0 ? ` (${validationErrors.length} validation warnings)` : ''}`,
       });
 
+      // Refresh inventory after successful bulk import
+      setTimeout(refreshInventory, 1000);
+
     } catch (error: any) {
       console.error('Bulk file processing failed:', error);
       toast({
@@ -506,12 +514,18 @@ const QuestionsAdmin = () => {
           title: "Success!",
           description: `${successCount} question(s) processed and saved successfully.`,
         });
+        // Refresh inventory after successful processing
+        setTimeout(refreshInventory, 1000);
       } else {
         toast({
           title: "Partial Success",
           description: `${successCount}/${totalCount} questions processed successfully.`,
           variant: "destructive",
         });
+        // Still refresh inventory for partial success
+        if (successCount > 0) {
+          setTimeout(refreshInventory, 1000);
+        }
       }
     } catch (error: any) {
       toast({
@@ -532,6 +546,127 @@ const QuestionsAdmin = () => {
     setJsonFile(null);
     setResults([]);
     setBulkResults(null);
+  };
+
+  const refreshInventory = () => {
+    inventoryWidgetRef.current?.refreshStats();
+  };
+
+  const verifyQuestionsInDatabase = async (questions: any[]) => {
+    setVerifyingQuestions(true);
+    try {
+      const questionIds = questions.map(q => q.id).filter(Boolean);
+      if (questionIds.length === 0) return [];
+
+      const { data, error } = await supabase
+        .from('questions')
+        .select('id, question_text, test_type, subject, topic')
+        .in('id', questionIds)
+        .eq('is_active', true);
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error verifying questions:', error);
+      return [];
+    } finally {
+      setVerifyingQuestions(false);
+    }
+  };
+
+  const createPracticeSession = async (questions: any[]) => {
+    setIsCreatingSession(true);
+    try {
+      // Verify questions exist in database first
+      const verifiedQuestions = await verifyQuestionsInDatabase(questions);
+      
+      if (verifiedQuestions.length === 0) {
+        toast({
+          title: "No Questions Found",
+          description: "Cannot find these questions in the database. Try refreshing the page.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Use the first question's metadata for session type
+      const firstQuestion = questions[0];
+      const sessionData = {
+        sessionType: 'topic_practice' as const,
+        testType: firstQuestion.test_type || 'SHSAT',
+        subject: firstQuestion.subject,
+        topic: firstQuestion.topic,
+        difficulty: firstQuestion.difficulty_level,
+        questionsData: verifiedQuestions // Pass the verified questions directly
+      };
+
+      const { data, error } = await supabase.functions.invoke('create-session', {
+        body: sessionData
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Practice Session Created!",
+        description: `Starting practice with ${verifiedQuestions.length} questions.`,
+      });
+
+      // Navigate to the practice interface
+      navigate(`/practice/session/${data.session.id}`);
+    } catch (error: any) {
+      console.error('Error creating practice session:', error);
+      toast({
+        title: "Session Creation Failed",
+        description: error.message || "Failed to create practice session.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingSession(false);
+    }
+  };
+
+  const getSuccessfulQuestions = () => {
+    const successful = results.filter(r => r.success && r.data);
+    return successful.map(r => r.data);
+  };
+
+  const canPracticeQuestions = () => {
+    const successfulQuestions = getSuccessfulQuestions();
+    const bulkSuccessful = bulkResults?.successful || 0;
+    
+    return successfulQuestions.length > 0 || bulkSuccessful > 0;
+  };
+
+  const handlePracticeNow = async () => {
+    const successfulQuestions = getSuccessfulQuestions();
+    
+    if (successfulQuestions.length > 0) {
+      // For individual/bulk text questions
+      await createPracticeSession(successfulQuestions);
+    } else if (bulkResults?.successful > 0) {
+      // For bulk file imports - fetch recently added questions
+      try {
+        const { data, error } = await supabase
+          .from('questions')
+          .select('*')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(Math.min(bulkResults.successful, 30));
+
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          await createPracticeSession(data);
+        }
+      } catch (error) {
+        console.error('Error fetching recent questions:', error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch questions for practice session.",
+          variant: "destructive",
+        });
+      }
+    }
   };
 
   const downloadSampleCsv = () => {
@@ -961,6 +1096,25 @@ AVOID: Very long reading passages, detailed explanations, or complex formatting 
         <Button variant="secondary" onClick={clearForm}>
           Clear
         </Button>
+        {canPracticeQuestions() && (
+          <Button 
+            onClick={handlePracticeNow}
+            disabled={isCreatingSession}
+            className="flex items-center gap-2 bg-primary"
+          >
+            {isCreatingSession ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                Creating Session...
+              </>
+            ) : (
+              <>
+                <Play className="h-4 w-4" />
+                Practice These Now
+              </>
+            )}
+          </Button>
+        )}
         </div>
 
         {/* Bulk Import Results */}
@@ -1008,8 +1162,39 @@ AVOID: Very long reading passages, detailed explanations, or complex formatting 
                 </div>
               </div>
             )}
-          </CardContent>
-          </Card>
+            
+            {/* Practice Now Button for Bulk Results */}
+            {bulkResults.successful > 0 && bulkResults.successful <= 30 && (
+              <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-primary">Ready to Practice!</p>
+                    <p className="text-sm text-muted-foreground">
+                      {bulkResults.successful} questions are ready for a practice session
+                    </p>
+                  </div>
+                  <Button 
+                    onClick={handlePracticeNow}
+                    disabled={isCreatingSession}
+                    className="flex items-center gap-2"
+                  >
+                    {isCreatingSession ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4" />
+                        Practice These Now
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+           </CardContent>
+           </Card>
         )}
 
         {/* Individual Processing Results Display */}
@@ -1074,6 +1259,66 @@ AVOID: Very long reading passages, detailed explanations, or complex formatting 
                   </div>
                 ))}
               </div>
+              
+              {/* Practice Now Button for Individual Results */}
+              {results.some(r => r.success) && results.filter(r => r.success).length <= 30 && (
+                <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-primary">Ready to Practice!</p>
+                      <p className="text-sm text-muted-foreground">
+                        {results.filter(r => r.success).length} questions are ready for a practice session
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          const questions = getSuccessfulQuestions();
+                          await verifyQuestionsInDatabase(questions);
+                          toast({
+                            title: "Verification Complete",
+                            description: "Questions verified in database.",
+                          });
+                        }}
+                        disabled={verifyingQuestions}
+                        className="flex items-center gap-2"
+                      >
+                        {verifyingQuestions ? (
+                          <>
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current"></div>
+                            Verifying...
+                          </>
+                        ) : (
+                          <>
+                            <Database className="h-3 w-3" />
+                            Verify
+                          </>
+                        )}
+                      </Button>
+                      <Button 
+                        onClick={handlePracticeNow}
+                        disabled={isCreatingSession}
+                        size="sm"
+                        className="flex items-center gap-2"
+                      >
+                        {isCreatingSession ? (
+                          <>
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                            Creating...
+                          </>
+                        ) : (
+                          <>
+                            <Play className="h-3 w-3" />
+                            Practice Now
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -1082,7 +1327,7 @@ AVOID: Very long reading passages, detailed explanations, or complex formatting 
 
         {/* Right Column - Admin Inventory */}
         <div className="space-y-6">
-          <AdminInventoryWidget />
+          <AdminInventoryWidget ref={inventoryWidgetRef} />
         </div>
       </div>
     </div>
