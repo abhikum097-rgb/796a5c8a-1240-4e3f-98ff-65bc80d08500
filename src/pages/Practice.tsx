@@ -7,13 +7,14 @@ import { Progress } from "@/components/ui/progress";
 import { Clock, Target, TrendingUp, Play, BookOpen, Users, Award, CheckCircle, Calendar } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { useNavigate } from "react-router-dom";
-import { generateMockQuestions } from "@/mock/data";
+
 import { useSupabaseQuestions } from "@/hooks/useSupabaseQuestions";
 import { useAuth } from "@/hooks/useAuth";
 import { TopicSelector } from "@/components/TopicSelector";
 import { useQuestionCount } from "@/hooks/useQuestionCount";
 import { useRecentPractice } from "@/hooks/useRecentPractice";
 import { formatDistance } from 'date-fns';
+import { toast } from "@/hooks/use-toast";
 
 const Practice = () => {
   const { state, dispatch } = useApp();
@@ -123,7 +124,8 @@ const Practice = () => {
       const filters: any = {
         testType: filtersToUse.testType,
         count: questionCount,
-        avoidRecent: true
+        avoidRecent: true,
+        strict: true
       };
 
       if (filtersToUse.subject && filtersToUse.subject !== 'all') {
@@ -140,64 +142,16 @@ const Practice = () => {
       const questions = await fetchQuestions(filters);
       console.log('Fetched questions:', questions);
 
-      let finalQuestions = questions;
-
-      // If we don't have enough questions, supplement with mock data
-      if (questions.length < questionCount) {
-        console.log(`Only ${questions.length} questions found, supplementing with mock data`);
-        const mockQuestions = generateMockQuestions(
-          questionCount - questions.length,
-          {
-            subject: filtersToUse.subject !== 'all' ? filtersToUse.subject : undefined,
-            difficulty: filtersToUse.difficulty !== 'all' ? filtersToUse.difficulty : undefined
-          }
-        );
-        finalQuestions = [...questions, ...mockQuestions];
+      if (questions.length === 0) {
+        toast({
+          title: "No Questions Available",
+          description: "No questions found for the selected criteria. Try adjusting your filters or add more questions to the database.",
+          variant: "destructive"
+        });
+        return;
       }
 
-      if (finalQuestions.length > 0) {
-        console.log('Starting session with questions:', finalQuestions.length);
-        dispatch({
-          type: 'START_SESSION',
-          payload: {
-            testType: filtersToUse.testType as 'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS',
-            sessionType,
-            subject: (filtersToUse.subject !== 'all' ? filtersToUse.subject : 'Math') as 'Math' | 'Verbal' | 'Reading',
-            topic: filtersToUse.topic !== 'all' ? filtersToUse.topic : 'General Practice',
-            questions: finalQuestions
-          }
-        });
-        navigate(`/dashboard/practice/session/${Date.now()}`);
-      } else {
-        console.error('No questions available');
-        // Fallback to mock questions if database is completely empty
-        console.log('Falling back to mock questions');
-        const mockQuestions = generateMockQuestions(questionCount, {
-          subject: filtersToUse.subject !== 'all' ? filtersToUse.subject : undefined,
-          difficulty: filtersToUse.difficulty !== 'all' ? filtersToUse.difficulty : undefined
-        });
-        
-        dispatch({
-          type: 'START_SESSION',
-          payload: {
-            testType: filtersToUse.testType as 'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS',
-            sessionType,
-            subject: (filtersToUse.subject !== 'all' ? filtersToUse.subject : 'Math') as 'Math' | 'Verbal' | 'Reading',
-            topic: filtersToUse.topic !== 'all' ? filtersToUse.topic : 'General Practice',
-            questions: mockQuestions
-          }
-        });
-        navigate(`/dashboard/practice/session/${Date.now()}`);
-      }
-    } catch (error) {
-      console.error('Error starting practice session:', error);
-      // Fallback to mock questions on error
-      console.log('Error occurred, falling back to mock questions');
-      const mockQuestions = generateMockQuestions(questionCount, {
-        subject: filtersToUse.subject !== 'all' ? filtersToUse.subject : undefined,
-        difficulty: filtersToUse.difficulty !== 'all' ? filtersToUse.difficulty : undefined
-      });
-      
+      console.log('Starting session with questions:', questions.length);
       dispatch({
         type: 'START_SESSION',
         payload: {
@@ -205,10 +159,17 @@ const Practice = () => {
           sessionType,
           subject: (filtersToUse.subject !== 'all' ? filtersToUse.subject : 'Math') as 'Math' | 'Verbal' | 'Reading',
           topic: filtersToUse.topic !== 'all' ? filtersToUse.topic : 'General Practice',
-          questions: mockQuestions
+          questions: questions
         }
       });
       navigate(`/dashboard/practice/session/${Date.now()}`);
+    } catch (error) {
+      console.error('Error starting practice session:', error);
+      toast({
+        title: "Error",
+        description: "Failed to start practice session. Please try again.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -254,8 +215,7 @@ const Practice = () => {
         {!isAuthenticated && (
           <div className="mt-4 p-4 bg-warning/10 border border-warning/20 rounded-lg">
             <p className="text-warning-foreground">
-              ⚠️ You need to be signed in to access the full question database. 
-              Practice sessions will use sample questions only.
+              ⚠️ Please sign in to access practice sessions. Database questions are only available to authenticated users.
             </p>
           </div>
         )}
@@ -468,9 +428,9 @@ const Practice = () => {
                         {countLoading ? 'Loading...' : `${availableQuestions} questions`}
                       </span>
                     </div>
-                    {availableQuestions < practiceModesToOptions[selectedMode].questions && (
-                      <Badge variant="outline" className="text-xs">
-                        Will use mock questions
+                    {availableQuestions < practiceModesToOptions[selectedMode].questions && isAuthenticated && (
+                      <Badge variant="outline" className="text-xs bg-info/10 text-info border-info/20">
+                        {availableQuestions} available
                       </Badge>
                     )}
                   </div>

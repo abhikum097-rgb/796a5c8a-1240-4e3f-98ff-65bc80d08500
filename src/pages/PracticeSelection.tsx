@@ -5,9 +5,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Clock, Target, BookOpen, Users, Play } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { useNavigate } from "react-router-dom";
-import { generateMockQuestions } from "@/mock/data";
 import { useSupabaseQuestions } from "@/hooks/useSupabaseQuestions";
 import { useAuth } from "@/hooks/useAuth";
+import { toast } from "@/hooks/use-toast";
 
 interface PracticeSelectionProps {
   testType: 'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS';
@@ -33,7 +33,8 @@ const PracticeSelection = ({ testType }: PracticeSelectionProps) => {
     try {
       const filters: any = {
         testType: testType,
-        count: questionCount
+        count: questionCount,
+        strict: true
       };
 
       if (selectedSubject && selectedSubject !== 'all') {
@@ -44,25 +45,14 @@ const PracticeSelection = ({ testType }: PracticeSelectionProps) => {
       }
 
       const questions = await fetchQuestions(filters);
-      let finalQuestions = questions;
 
-      if (questions.length < questionCount) {
-        const mockQuestions = generateMockQuestions(
-          questionCount - questions.length,
-          {
-            subject: selectedSubject !== 'all' ? selectedSubject : undefined,
-            difficulty: selectedDifficulty !== 'all' ? selectedDifficulty : undefined
-          }
-        );
-        finalQuestions = [...questions, ...mockQuestions];
-      }
-
-      if (finalQuestions.length === 0) {
-        const mockQuestions = generateMockQuestions(questionCount, {
-          subject: selectedSubject !== 'all' ? selectedSubject : undefined,
-          difficulty: selectedDifficulty !== 'all' ? selectedDifficulty : undefined
+      if (questions.length === 0) {
+        toast({
+          title: "No Questions Available",
+          description: "No questions found for the selected criteria. Try adjusting your filters or add more questions to the database.",
+          variant: "destructive"
         });
-        finalQuestions = mockQuestions;
+        return;
       }
 
       dispatch({
@@ -72,28 +62,17 @@ const PracticeSelection = ({ testType }: PracticeSelectionProps) => {
           sessionType,
           subject: (selectedSubject !== 'all' ? selectedSubject : 'Math') as 'Math' | 'Verbal' | 'Reading',
           topic: 'General Practice',
-          questions: finalQuestions
+          questions: questions
         }
       });
       navigate(`/dashboard/practice/session/${Date.now()}`);
     } catch (error) {
       console.error('Error starting practice session:', error);
-      const mockQuestions = generateMockQuestions(questionCount, {
-        subject: selectedSubject !== 'all' ? selectedSubject : undefined,
-        difficulty: selectedDifficulty !== 'all' ? selectedDifficulty : undefined
+      toast({
+        title: "Error",
+        description: "Failed to start practice session. Please try again.",
+        variant: "destructive"
       });
-      
-      dispatch({
-        type: 'START_SESSION',
-        payload: {
-          testType: testType,
-          sessionType,
-          subject: (selectedSubject !== 'all' ? selectedSubject : 'Math') as 'Math' | 'Verbal' | 'Reading',
-          topic: 'General Practice',
-          questions: mockQuestions
-        }
-      });
-      navigate(`/dashboard/practice/session/${Date.now()}`);
     }
   };
 
@@ -341,8 +320,7 @@ const PracticeSelection = ({ testType }: PracticeSelectionProps) => {
         {!isAuthenticated && (
           <div className="mt-4 p-4 bg-warning/10 border border-warning/20 rounded-lg">
             <p className="text-warning-foreground">
-              ⚠️ You need to be signed in to access the full question database. 
-              Practice sessions will use sample questions only.
+              ⚠️ Please sign in to access practice sessions. Database questions are only available to authenticated users.
             </p>
           </div>
         )}

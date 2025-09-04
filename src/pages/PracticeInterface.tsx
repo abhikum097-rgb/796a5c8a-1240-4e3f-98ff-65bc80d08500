@@ -20,7 +20,7 @@ import { QuestionNavigator } from "@/components/QuestionNavigator";
 import { SessionControls } from "@/components/SessionControls";
 import { DifficultyBadge } from "@/components/DifficultyBadge";
 import { useSupabaseQuestions } from "@/hooks/useSupabaseQuestions";
-import { generateMockQuestions } from "@/mock/data";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,65 +43,15 @@ const PracticeInterface = () => {
 
   const session = state.practiceSession;
 
-  // Initialize session if not exists
+  // Initialize session if not exists - but don't auto-fetch, just set initializing to false
   useEffect(() => {
-    const initializeSession = async () => {
-      if (!session && sessionId) {
-        setIsInitializing(true);
-        
-        try {
-          // Try to fetch real questions from Supabase
-          const questions = await fetchQuestions({
-            testType: 'SHSAT',
-            count: 20
-          });
-          
-          let finalQuestions = questions;
-          
-          // If no questions found, use mock data as fallback
-          if (!questions || questions.length === 0) {
-            console.warn('No questions found in database, using mock data');
-            finalQuestions = generateMockQuestions(20, {});
-          } else if (questions.length < 20) {
-            console.warn(`Only ${questions.length} questions found, supplementing with mock data`);
-            const mockQuestions = generateMockQuestions(20 - questions.length, {});
-            finalQuestions = [...questions, ...mockQuestions];
-          }
-
-          dispatch({
-            type: 'START_SESSION',
-            payload: {
-              testType: 'SHSAT',
-              sessionType: 'topic_practice',
-              subject: 'Math',
-              topic: 'General Practice',
-              questions: finalQuestions
-            }
-          });
-        } catch (error) {
-          console.error('Error initializing session:', error);
-          // Fallback to mock questions
-          const mockQuestions = generateMockQuestions(20, {});
-          dispatch({
-            type: 'START_SESSION',
-            payload: {
-              testType: 'SHSAT',
-              sessionType: 'topic_practice',
-              subject: 'Math',
-              topic: 'General Practice',
-              questions: mockQuestions
-            }
-          });
-        } finally {
-          setIsInitializing(false);
-        }
-      } else {
-        setIsInitializing(false);
-      }
-    };
-
-    initializeSession();
-  }, [session, sessionId, dispatch, fetchQuestions]);
+    if (!session && sessionId) {
+      // Session not found, we'll show the "Session Not Found" message
+      setIsInitializing(false);
+    } else {
+      setIsInitializing(false);
+    }
+  }, [session, sessionId]);
 
   // Show pause overlay when session is paused
   useEffect(() => {
@@ -383,9 +333,25 @@ const PracticeInterface = () => {
                           </Button>
                         </div>
                         
-                        <div className="text-lg leading-relaxed">
+                        <div className="text-lg leading-relaxed whitespace-pre-wrap">
                           {currentQuestion.questionText}
                         </div>
+                        
+                        {/* Render question images if available */}
+                        {currentQuestion.questionImages && currentQuestion.questionImages.length > 0 && (
+                          <div className="mt-4 space-y-2">
+                            {currentQuestion.questionImages.map((imageUrl, index) => (
+                              <div key={index} className="border rounded-lg overflow-hidden">
+                                <img 
+                                  src={imageUrl} 
+                                  alt={`Question image ${index + 1}`}
+                                  className="w-full max-w-2xl mx-auto cursor-pointer hover:opacity-90 transition-opacity"
+                                  onClick={() => window.open(imageUrl, '_blank')}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

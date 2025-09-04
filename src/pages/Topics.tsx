@@ -5,9 +5,9 @@ import { Progress } from "@/components/ui/progress";
 import { Calculator, MessageSquare, FileText, Play, Lock } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { useNavigate } from "react-router-dom";
-import { generateMockQuestions } from "@/mock/data";
 import { useSupabaseQuestions } from "@/hooks/useSupabaseQuestions";
 import { useAuth } from "@/hooks/useAuth";
+import { toast } from "@/hooks/use-toast";
 
 const Topics = () => {
   const { state, dispatch } = useApp();
@@ -95,25 +95,17 @@ const Topics = () => {
                                 testType: state.user.selectedTest || 'SHSAT',
                                 subject: subject.subject,
                                 topic: topic.topic,
-                                count: 15
+                                count: 15,
+                                strict: true
                               });
 
-                              // Handle limited question data
-                              const targetCount = 15;
                               if (questions.length === 0) {
-                                console.warn('No questions found from backend, using mock data');
-                                const mockQuestions = generateMockQuestions(targetCount, { 
-                                  subject: subject.subject, 
-                                  topic: topic.topic 
+                                toast({
+                                  title: "No Questions Available",
+                                  description: `No questions found for ${topic.topic} in ${subject.subject}. Try selecting a different topic or add more questions to the database.`,
+                                  variant: "destructive"
                                 });
-                                questions.push(...mockQuestions);
-                              } else if (questions.length < targetCount) {
-                                console.warn(`Only ${questions.length} questions found for ${topic.topic}, supplementing with mock data`);
-                                const mockQuestions = generateMockQuestions(
-                                  targetCount - questions.length,
-                                  { subject: subject.subject, topic: topic.topic }
-                                );
-                                questions.push(...mockQuestions);
+                                return;
                               }
 
                               dispatch({
@@ -129,22 +121,11 @@ const Topics = () => {
                               navigate(`/dashboard/practice/session/${Date.now()}`);
                             } catch (error) {
                               console.error('Error starting topic practice:', error);
-                              // Fallback to mock questions
-                              const questions = generateMockQuestions(15, { 
-                                subject: subject.subject, 
-                                topic: topic.topic 
+                              toast({
+                                title: "Error",
+                                description: "Failed to start topic practice. Please try again.",
+                                variant: "destructive"
                               });
-                              dispatch({
-                                type: 'START_SESSION',
-                                payload: {
-                                  testType: state.user.selectedTest || 'SHSAT',
-                                  sessionType: 'topic_practice',
-                                  subject: subject.subject as 'Math' | 'Verbal' | 'Reading',
-                                  topic: topic.topic,
-                                  questions
-                                }
-                              });
-                              navigate(`/dashboard/practice/session/${Date.now()}`);
                             }
                           }}
                         >

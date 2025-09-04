@@ -44,10 +44,11 @@ serve(async (req) => {
     const topic = body.topic;
     const difficulty = body.difficulty;
     const avoidRecent = body.avoidRecent !== false; // Default true
+    const strict = body.strict !== false; // Default true for exact filtering
     const sessionId = body.sessionId;
 
     console.log('Fetching questions for authenticated user:', user.id);
-    console.log('Query params:', { count, testType, subject, topic, difficulty, avoidRecent });
+    console.log('Query params:', { count, testType, subject, topic, difficulty, avoidRecent, strict });
 
     // Get recently seen questions to avoid repetition
     let recentQuestionIds = [];
@@ -99,8 +100,8 @@ serve(async (req) => {
 
     let selectedQuestions = questions || [];
 
-    // If we don't have enough fresh questions, gradually relax constraints
-    if (selectedQuestions.length < count) {
+    // If strict mode is disabled and we don't have enough fresh questions, gradually relax constraints
+    if (!strict && selectedQuestions.length < count) {
       console.log(`Only ${selectedQuestions.length} fresh questions found, expanding search...`);
       
       // First try without avoiding recent questions
@@ -148,6 +149,8 @@ serve(async (req) => {
           selectedQuestions = fallbackQuestions;
         }
       }
+    } else if (strict) {
+      console.log(`Strict mode: returning ${selectedQuestions.length} exact matches (no broadening)`);
     }
 
     if (!selectedQuestions || selectedQuestions.length === 0) {

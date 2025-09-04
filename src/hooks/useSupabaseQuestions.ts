@@ -10,6 +10,7 @@ interface QuestionFilters {
   count?: number;
   avoidRecent?: boolean;
   sessionId?: string;
+  strict?: boolean;
 }
 
 export const useSupabaseQuestions = () => {
@@ -37,6 +38,7 @@ export const useSupabaseQuestions = () => {
         topic: dbQuestion.topic,
         difficulty: dbQuestion.difficulty_level,
         questionText: dbQuestion.question_text,
+        questionImages: Array.isArray(dbQuestion.question_images) ? dbQuestion.question_images : [],
         options: {
           A: dbQuestion.option_a,
           B: dbQuestion.option_b,

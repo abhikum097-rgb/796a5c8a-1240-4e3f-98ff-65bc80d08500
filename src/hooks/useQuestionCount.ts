@@ -33,6 +33,7 @@ export const useQuestionCount = (filters: QuestionCountFilters) => {
           topic: filters.topic !== 'all' ? filters.topic : undefined,
           difficulty: filters.difficulty !== 'all' ? filters.difficulty : undefined,
           count: 1000, // Get a large number to count available questions
+          strict: true, // Always use strict filtering for accurate counts
         });
         setCount(questions.length);
       } catch (error) {
