@@ -67,6 +67,7 @@ const QuestionsAdmin = () => {
 
   const [textInput, setTextInput] = useState('');
   const [bulkInput, setBulkInput] = useState('');
+  const [bulkInputStats, setBulkInputStats] = useState({ words: 0, questions: 0, avgWordsPerQuestion: 0, withinLimits: true });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [jsonFile, setJsonFile] = useState<File | null>(null);
@@ -251,28 +252,66 @@ const QuestionsAdmin = () => {
   };
 
   const processBulkQuestions = async (bulkText: string): Promise<ProcessingResult[]> => {
-    const questions = bulkText.split(/\n\s*\n/).filter(q => q.trim());
+    // Smart question separation - handles various formats
+    const questions = bulkText
+      .split(/\n\s*\n/)
+      .filter(q => q.trim())
+      .map(q => q.trim());
+    
     const results: ProcessingResult[] = [];
     
     console.log(`Processing ${questions.length} questions from bulk text`);
     
-    for (let i = 0; i < questions.length; i++) {
-      const questionText = questions[i];
-      console.log(`Processing question ${i + 1}/${questions.length}`);
+    // Process in smaller batches if input is large
+    const batchSize = questions.length > LIMITS.RECOMMENDED_QUESTIONS ? 3 : questions.length;
+    
+    for (let i = 0; i < questions.length; i += batchSize) {
+      const batch = questions.slice(i, i + batchSize);
       
-      try {
-        const result = await processTextQuestion(questionText);
-        results.push({
-          ...result,
-          data: { ...result.data, questionNumber: i + 1, questionPreview: questionText.substring(0, 100) + '...' }
-        });
-      } catch (error: any) {
-        console.error(`Error processing question ${i + 1}:`, error);
-        results.push({
-          success: false,
-          error: `Question ${i + 1}: ${error.message}`,
-          data: { questionNumber: i + 1, questionPreview: questionText.substring(0, 100) + '...' }
-        });
+      for (let j = 0; j < batch.length; j++) {
+        const questionText = batch[j];
+        const questionNumber = i + j + 1;
+        
+        console.log(`Processing question ${questionNumber}/${questions.length}`);
+        
+        try {
+          // Pre-validate question format
+          if (questionText.length < 20) {
+            throw new Error('Question too short - needs question text and options');
+          }
+          
+          if (!questionText.match(/[A-D]\)/)) {
+            console.warn(`Question ${questionNumber} may be missing options A), B), C), D)`);
+          }
+          
+          const result = await processTextQuestion(questionText);
+          results.push({
+            ...result,
+            data: { 
+              ...result.data, 
+              questionNumber, 
+              questionPreview: questionText.substring(0, 100) + (questionText.length > 100 ? '...' : ''),
+              wordCount: questionText.split(/\s+/).length
+            }
+          });
+          
+          // Small delay between questions to avoid rate limiting
+          if (j < batch.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+          
+        } catch (error: any) {
+          console.error(`Error processing question ${questionNumber}:`, error);
+          results.push({
+            success: false,
+            error: `Question ${questionNumber}: ${error.message}`,
+            data: { 
+              questionNumber, 
+              questionPreview: questionText.substring(0, 100) + (questionText.length > 100 ? '...' : ''),
+              wordCount: questionText.split(/\s+/).length
+            }
+          });
+        }
       }
     }
     
@@ -509,6 +548,42 @@ SSAT,Verbal,Vocabulary,Synonyms,Easy,"Choose the word that means the same as HAP
     window.URL.revokeObjectURL(url);
   };
 
+  // Optimal limits for reliable AI processing
+  const LIMITS = {
+    MAX_QUESTIONS: 8,
+    MAX_WORDS_PER_QUESTION: 300,
+    MAX_TOTAL_WORDS: 2000,
+    RECOMMENDED_QUESTIONS: 5
+  };
+
+  const analyzeTextInput = (text: string) => {
+    if (!text.trim()) {
+      return { words: 0, questions: 0, avgWordsPerQuestion: 0, withinLimits: true };
+    }
+    
+    const questions = text.split(/\n\s*\n/).filter(q => q.trim());
+    const words = text.split(/\s+/).length;
+    const avgWordsPerQuestion = questions.length > 0 ? Math.round(words / questions.length) : 0;
+    
+    const withinLimits = (
+      questions.length <= LIMITS.MAX_QUESTIONS &&
+      words <= LIMITS.MAX_TOTAL_WORDS &&
+      avgWordsPerQuestion <= LIMITS.MAX_WORDS_PER_QUESTION
+    );
+    
+    return { 
+      words, 
+      questions: questions.length, 
+      avgWordsPerQuestion,
+      withinLimits 
+    };
+  };
+
+  const handleBulkInputChange = (text: string) => {
+    setBulkInput(text);
+    setBulkInputStats(analyzeTextInput(text));
+  };
+
   const hasMetadata = metadata.test_type || metadata.subject || metadata.topic || metadata.difficulty_level;
 
   return (
@@ -661,49 +736,108 @@ SSAT,Verbal,Vocabulary,Synonyms,Easy,"Choose the word that means the same as HAP
             <TabsContent value="bulk" className="space-y-4">
               <div className="flex items-center justify-between">
                 <Label htmlFor="bulk-input">Bulk Questions (Text)</Label>
-                <div className="text-xs text-muted-foreground">
-                  Separate questions with blank lines
+                <div className="flex items-center gap-3 text-xs">
+                  <div className={`flex items-center gap-1 ${bulkInputStats.withinLimits ? 'text-green-600' : 'text-red-600'}`}>
+                    <span>{bulkInputStats.questions}/{LIMITS.MAX_QUESTIONS} questions</span>
+                  </div>
+                  <div className={`flex items-center gap-1 ${bulkInputStats.words <= LIMITS.MAX_TOTAL_WORDS ? 'text-green-600' : 'text-red-600'}`}>
+                    <span>{bulkInputStats.words}/{LIMITS.MAX_TOTAL_WORDS} words</span>
+                  </div>
                 </div>
               </div>
               
-              {/* Formatting Tips */}
+              {!bulkInputStats.withinLimits && (
+                <div className="bg-red-50 dark:bg-red-950 p-3 rounded-lg border border-red-200 dark:border-red-800">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-1">
+                        Input exceeds recommended limits
+                      </p>
+                      <ul className="text-xs text-red-700 dark:text-red-300 space-y-1">
+                        {bulkInputStats.questions > LIMITS.MAX_QUESTIONS && (
+                          <li>• Too many questions ({bulkInputStats.questions}/{LIMITS.MAX_QUESTIONS}). Consider splitting into smaller batches.</li>
+                        )}
+                        {bulkInputStats.words > LIMITS.MAX_TOTAL_WORDS && (
+                          <li>• Too much text ({bulkInputStats.words}/{LIMITS.MAX_TOTAL_WORDS} words). Reduce explanations or split content.</li>
+                        )}
+                        {bulkInputStats.avgWordsPerQuestion > LIMITS.MAX_WORDS_PER_QUESTION && (
+                          <li>• Questions too detailed (avg {bulkInputStats.avgWordsPerQuestion}/{LIMITS.MAX_WORDS_PER_QUESTION} words each). Keep questions concise.</li>
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Optimal Formatting Guide */}
               <div className="bg-blue-50 dark:bg-blue-950 p-3 rounded-lg">
-                <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">Formatting Tips for Best Results:</h4>
-                <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
-                  <li>• <strong>Separate each question with one blank line</strong></li>
-                  <li>• Label options clearly as A), B), C), D) or A:, B:, C:, D:</li>
-                  <li>• Include "Answer: B" or "Correct: B" if you know it</li>
-                  <li>• Add "Explanation: ..." for detailed reasoning</li>
-                  <li>• AI will infer missing test type, subject, topic, and difficulty</li>
-                </ul>
+                <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">📚 Optimal Format for Best AI Results:</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-blue-800 dark:text-blue-200">
+                  <div>
+                    <p className="font-medium mb-1">Structure (Required):</p>
+                    <ul className="space-y-0.5">
+                      <li>• <strong>One blank line</strong> between questions</li>
+                      <li>• Clear A), B), C), D) options</li>
+                      <li>• "Answer: B" or "Correct: B"</li>
+                      <li>• Brief explanation (optional)</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-medium mb-1">Limits (Recommended):</p>
+                    <ul className="space-y-0.5">
+                      <li>• <strong>{LIMITS.RECOMMENDED_QUESTIONS} questions</strong> per batch (optimal)</li>
+                      <li>• <strong>&lt;{LIMITS.MAX_WORDS_PER_QUESTION} words</strong> per question</li>
+                      <li>• Skip lengthy explanations initially</li>
+                      <li>• Include context only when essential</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
               
               <Textarea
                 id="bulk-input"
                 rows={15}
-                placeholder="Paste multiple questions separated by blank lines...
+                placeholder={`Paste up to ${LIMITS.MAX_QUESTIONS} questions separated by blank lines...
 
-Example Format:
+CONCISE EXAMPLE (AI handles this perfectly):
 
 What is 2 + 2?
 A) 3
-B) 4
+B) 4  
 C) 5
 D) 6
 Answer: B
-Explanation: 2 + 2 equals 4 by basic addition.
 
 The capital of France is:
 A) Berlin
-B) Madrid  
+B) Madrid
 C) Paris
 D) Rome
 Answer: C
-Explanation: Paris is the capital and largest city of France."
+Explanation: Paris has been the capital since 987 AD.
+
+AVOID: Very long reading passages, detailed explanations, or complex formatting initially. Start simple!`}
                 value={bulkInput}
-                onChange={(e) => setBulkInput(e.target.value)}
+                onChange={(e) => handleBulkInputChange(e.target.value)}
                 className="resize-none"
               />
+              
+              {/* Smart Processing Preview */}
+              {bulkInput && bulkInputStats.questions > 0 && (
+                <div className="bg-muted/30 p-3 rounded-lg">
+                  <h4 className="text-sm font-medium mb-2">🤖 AI Processing Preview:</h4>
+                  <div className="text-xs space-y-1">
+                    <p><strong>Detected:</strong> {bulkInputStats.questions} questions ({bulkInputStats.words} words total)</p>
+                    <p><strong>AI will infer:</strong> Test type, subject, topic, difficulty for each question</p>
+                    <p><strong>Processing mode:</strong> {
+                      bulkInputStats.withinLimits 
+                        ? <span className="text-green-600">✓ Optimal (high accuracy expected)</span>
+                        : <span className="text-amber-600">⚠ Large input (may have some parsing issues)</span>
+                    }</p>
+                  </div>
+                </div>
+              )}
               
               {!hasMetadata && (
                 <div className="bg-amber-50 dark:bg-amber-950 p-3 rounded-lg">
@@ -711,10 +845,10 @@ Explanation: Paris is the capital and largest city of France."
                     <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5" />
                     <div>
                       <p className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-1">
-                        Using AI to infer metadata
+                        AI will infer all metadata
                       </p>
                       <p className="text-xs text-amber-700 dark:text-amber-300">
-                        AI will automatically determine test type, subject, topic, and difficulty for each question. Set defaults above to override this behavior.
+                        For each question, AI will automatically determine: test type (SHSAT/SSAT/ISEE/etc.), subject (Math/Verbal/Reading), topic, and difficulty level. Set defaults above to override.
                       </p>
                     </div>
                   </div>
