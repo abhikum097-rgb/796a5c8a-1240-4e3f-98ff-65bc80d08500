@@ -39,6 +39,7 @@ export const useSupabaseQuestions = () => {
         difficulty: dbQuestion.difficulty_level,
         questionText: dbQuestion.question_text,
         questionImages: Array.isArray(dbQuestion.question_images) ? dbQuestion.question_images : [],
+        passage: dbQuestion.passage || undefined, // Include passage for reading questions
         options: {
           A: dbQuestion.option_a,
           B: dbQuestion.option_b,

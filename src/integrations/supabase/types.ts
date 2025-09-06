@@ -221,6 +221,7 @@ export type Database = {
           option_b: string
           option_c: string
           option_d: string
+          passage: string | null
           question_images: string[] | null
           question_text: string
           sub_topic: string | null
@@ -241,6 +242,7 @@ export type Database = {
           option_b: string
           option_c: string
           option_d: string
+          passage?: string | null
           question_images?: string[] | null
           question_text: string
           sub_topic?: string | null
@@ -261,6 +263,7 @@ export type Database = {
           option_b?: string
           option_c?: string
           option_d?: string
+          passage?: string | null
           question_images?: string[] | null
           question_text?: string
           sub_topic?: string | null

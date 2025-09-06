@@ -18,6 +18,7 @@ export interface Question {
   difficulty: 'Easy' | 'Medium' | 'Hard';
   questionText: string;
   questionImages?: string[];
+  passage?: string; // Reading passage for comprehension questions
   options: {
     A: string;
     B: string;

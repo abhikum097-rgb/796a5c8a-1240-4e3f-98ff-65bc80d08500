@@ -13,7 +13,8 @@ import {
   Play, 
   Pause,
   Square,
-  AlertTriangle
+  AlertTriangle,
+  BookOpen
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { QuestionNavigator } from "@/components/QuestionNavigator";
@@ -315,6 +316,23 @@ const PracticeInterface = () => {
               {/* Fixed Height Question Container */}
               <div className="h-[480px] overflow-y-scroll scrollbar-stable">
                 <div className="space-y-6 pr-2">
+                  {/* Reading Passage (if present) */}
+                  {currentQuestion.passage && (
+                    <Card className="mb-4 border-l-4 border-l-primary">
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <BookOpen className="h-5 w-5" />
+                          Reading Passage
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-6">
+                        <div className="prose prose-sm max-w-none text-foreground leading-relaxed whitespace-pre-wrap">
+                          {currentQuestion.passage}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
                   {/* Question Text */}
                   <Card>
                     <CardContent className="p-6">
