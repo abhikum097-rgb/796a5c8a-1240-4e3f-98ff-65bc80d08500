@@ -39,7 +39,7 @@ const Dashboard = () => {
     <div className="space-y-8">
       {/* Welcome Section */}
       <div>
-        <h1 className="text-3xl font-bold text-foreground">Welcome back, {state.user.firstName}!</h1>
+        <h1 className="text-3xl font-bold text-foreground">Welcome back, {state.user?.firstName || 'User'}!</h1>
         <p className="text-muted-foreground mt-2">
           Keep up the great work. You're on a {studyStreak}-day study streak! 🔥
         </p>
