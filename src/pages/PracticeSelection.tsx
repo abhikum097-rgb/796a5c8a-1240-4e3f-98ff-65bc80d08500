@@ -37,12 +37,31 @@ const PracticeSelection = ({ testType }: PracticeSelectionProps) => {
         strict: true
       };
 
-      if (selectedSubject && selectedSubject !== 'all') {
+      // Apply filters based on session type
+      if (sessionType === 'subject_practice') {
+        // Subject practice requires a specific subject
+        if (!selectedSubject || selectedSubject === 'all') {
+          toast({
+            title: "Subject Required",
+            description: "Please select a specific subject for subject practice.",
+            variant: "destructive"
+          });
+          return;
+        }
         filters.subject = selectedSubject;
+        if (selectedDifficulty && selectedDifficulty !== 'all') {
+          filters.difficulty = selectedDifficulty;
+        }
+      } else if (sessionType === 'topic_practice') {
+        // Topic practice uses selected filters
+        if (selectedSubject && selectedSubject !== 'all') {
+          filters.subject = selectedSubject;
+        }
+        if (selectedDifficulty && selectedDifficulty !== 'all') {
+          filters.difficulty = selectedDifficulty;
+        }
       }
-      if (selectedDifficulty && selectedDifficulty !== 'all') {
-        filters.difficulty = selectedDifficulty;
-      }
+      // Full tests and mixed review use no additional filters (all subjects/difficulties)
 
       const questions = await fetchQuestions(filters);
 
