@@ -55,7 +55,7 @@ const Topics = () => {
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {subject.topics.map((topic) => (
+              {(subject.topics || []).map((topic) => (
                 <Card key={topic.topic} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
                     <div className="flex items-center justify-between">
@@ -92,7 +92,7 @@ const Topics = () => {
 
                             try {
                               const questions = await fetchQuestions({
-                                testType: state.user.selectedTest || 'SHSAT',
+                                testType: state.user?.selectedTest || 'SHSAT',
                                 subject: subject.subject,
                                 topic: topic.topic,
                                 count: 15,
@@ -111,7 +111,7 @@ const Topics = () => {
                               dispatch({
                                 type: 'START_SESSION',
                                 payload: {
-                                  testType: state.user.selectedTest || 'SHSAT',
+                                  testType: state.user?.selectedTest || 'SHSAT',
                                   sessionType: 'topic_practice',
                                   subject: subject.subject as 'Math' | 'Verbal' | 'Reading',
                                   topic: topic.topic,
