@@ -332,6 +332,18 @@ const PracticeInterface = () => {
                       </CardContent>
                     </Card>
                   )}
+                  
+                  {/* Info banner for reading questions without passage */}
+                  {currentQuestion.subject === 'Reading' && !currentQuestion.passage && (
+                    <Card className="mb-4 border-l-4 border-l-muted bg-muted/50">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <BookOpen className="h-4 w-4" />
+                          <span>This reading comprehension question may be missing its passage.</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
 
                   {/* Question Text */}
                   <Card>

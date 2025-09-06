@@ -25,6 +25,7 @@ REQUIRED JSON STRUCTURE:
   "sub_topic": "string (optional, more specific topic)",
   "difficulty_level": "Easy|Medium|Hard",
   "question_text": "string (the main question)",
+  "passage": "string (optional, for reading comprehension - include ONLY if there is a reading passage)",
   "option_a": "string",
   "option_b": "string", 
   "option_c": "string",
@@ -41,6 +42,7 @@ INSTRUCTIONS:
 4. Assign difficulty based on question complexity
 5. Write a clear explanation for the correct answer
 6. Suggest appropriate time allocation
+7. If there's a reading passage, include it in the "passage" field
 
 If any information is unclear or missing, make reasonable assumptions based on the question content.
 
@@ -132,6 +134,7 @@ const QuestionsAdmin = () => {
           sub_topic: questionData.sub_topic,
           difficulty_level: questionData.difficulty_level,
           question_text: questionData.question_text,
+          passage: questionData.passage || null,
           option_a: questionData.option_a,
           option_b: questionData.option_b,
           option_c: questionData.option_c,
@@ -670,9 +673,9 @@ const QuestionsAdmin = () => {
   };
 
   const downloadSampleCsv = () => {
-    const sampleData = `test_type,subject,topic,sub_topic,difficulty_level,question_text,option_a,option_b,option_c,option_d,correct_answer,explanation,time_allocated
-SHSAT,Math,Algebra,Linear Equations,Medium,"Solve for x: 2x + 5 = 13",x = 4,x = 8,x = 9,x = 3,A,"To solve 2x + 5 = 13: Subtract 5 from both sides: 2x = 8. Divide by 2: x = 4.",90
-SSAT,Verbal,Vocabulary,Synonyms,Easy,"Choose the word that means the same as HAPPY:",sad,joyful,angry,tired,B,"Happy means joyful or pleased. The other options are antonyms or unrelated.",60`;
+    const sampleData = `test_type,subject,topic,sub_topic,difficulty_level,question_text,passage,option_a,option_b,option_c,option_d,correct_answer,explanation,time_allocated
+SHSAT,Math,Algebra,Linear Equations,Medium,"Solve for x: 2x + 5 = 13",,"x = 4","x = 8","x = 9","x = 3",A,"To solve 2x + 5 = 13: Subtract 5 from both sides: 2x = 8. Divide by 2: x = 4.",90
+SSAT,Reading,Reading Comprehension,Literary Analysis,Medium,"What is the main theme of the passage?","The sun was setting over the horizon, casting long shadows across the meadow. Sarah had always found peace in these quiet moments, when the world seemed to pause and reflect. As she watched the golden light fade, she realized that sometimes the most beautiful things in life are also the most fleeting.","The importance of time","The beauty of nature","Finding peace in solitude","The cycle of day and night",C,"The passage focuses on Sarah finding peace and reflection during a quiet moment, emphasizing solitude and inner tranquility.",120`;
     
     const blob = new Blob([sampleData], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -844,6 +847,31 @@ SSAT,Verbal,Vocabulary,Synonyms,Easy,"Choose the word that means the same as HAP
                 onChange={(e) => setTextInput(e.target.value)}
                 className="resize-none"
               />
+              
+              <div className="border-t pt-4">
+                <Label htmlFor="passage-input" className="text-sm font-medium text-muted-foreground">
+                  Reading Passage (Optional)
+                </Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Only include a passage for reading comprehension questions. Leave blank for other question types.
+                </p>
+                <Textarea
+                  id="passage-input"
+                  rows={5}
+                  placeholder="Enter the reading passage here if this is a reading comprehension question..."
+                  value={textInput.includes("READING PASSAGE:") ? textInput.split("READING PASSAGE:")[1]?.split("QUESTION:")[0]?.trim() || "" : ""}
+                  onChange={(e) => {
+                    const passageText = e.target.value;
+                    const currentQuestion = textInput.includes("QUESTION:") ? textInput.split("QUESTION:")[1] || textInput : textInput;
+                    if (passageText.trim()) {
+                      setTextInput(`READING PASSAGE:\n${passageText}\n\nQUESTION:\n${currentQuestion}`);
+                    } else {
+                      setTextInput(currentQuestion);
+                    }
+                  }}
+                  className="resize-none text-sm"
+                />
+              </div>
             </TabsContent>
 
             <TabsContent value="image" className="space-y-4">

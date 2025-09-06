@@ -45,6 +45,7 @@ REQUIRED JSON STRUCTURE (respond with ONLY this JSON object):
   "sub_topic": "string (optional, more specific topic)",
   "difficulty_level": "Easy|Medium|Hard",
   "question_text": "string (the main question)",
+  "passage": "string (optional, for reading comprehension - include ONLY if there is a reading passage)",
   "option_a": "string",
   "option_b": "string", 
   "option_c": "string",

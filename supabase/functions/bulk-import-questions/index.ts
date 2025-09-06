@@ -13,6 +13,7 @@ interface BulkQuestion {
   sub_topic?: string;
   difficulty_level: string;
   question_text: string;
+  passage?: string;
   option_a: string;
   option_b: string;
   option_c: string;
@@ -99,6 +100,7 @@ serve(async (req) => {
             sub_topic: question.sub_topic || null,
             difficulty_level: question.difficulty_level,
             question_text: question.question_text,
+            passage: question.passage || null,
             option_a: question.option_a,
             option_b: question.option_b,
             option_c: question.option_c,
