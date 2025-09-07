@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { useSupabaseQuestions } from "@/hooks/useSupabaseQuestions";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
+import { useServerSession } from "@/hooks/useServerSession";
 
 interface PracticeSelectionProps {
   testType: 'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS';
@@ -18,6 +19,7 @@ const PracticeSelection = ({ testType }: PracticeSelectionProps) => {
   const navigate = useNavigate();
   const { fetchQuestions, loading } = useSupabaseQuestions();
   const { requireAuth, isAuthenticated } = useAuth();
+  const { createSession } = useServerSession();
   const [selectedTab, setSelectedTab] = useState<'Full Tests' | 'Subject Practice' | 'Topic Practice' | 'Mixed Review'>('Full Tests');
   const [selectedSubject, setSelectedSubject] = useState<string>('all');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('all');
@@ -31,39 +33,23 @@ const PracticeSelection = ({ testType }: PracticeSelectionProps) => {
     }
 
     try {
-      const filters: any = {
-        testType: testType,
-        count: questionCount,
-        strict: true
-      };
-
-      // Apply filters based on session type
-      if (sessionType === 'subject_practice') {
-        // Subject practice requires a specific subject
-        if (!selectedSubject || selectedSubject === 'all') {
-          toast({
-            title: "Subject Required",
-            description: "Please select a specific subject for subject practice.",
-            variant: "destructive"
-          });
-          return;
-        }
-        filters.subject = selectedSubject;
-        if (selectedDifficulty && selectedDifficulty !== 'all') {
-          filters.difficulty = selectedDifficulty;
-        }
-      } else if (sessionType === 'topic_practice') {
-        // Topic practice uses selected filters
-        if (selectedSubject && selectedSubject !== 'all') {
-          filters.subject = selectedSubject;
-        }
-        if (selectedDifficulty && selectedDifficulty !== 'all') {
-          filters.difficulty = selectedDifficulty;
-        }
+      // Validate subject requirement for subject practice
+      if (sessionType === 'subject_practice' && (!selectedSubject || selectedSubject === 'all')) {
+        toast({
+          title: "Subject Required",
+          description: "Please select a specific subject for subject practice.",
+          variant: "destructive"
+        });
+        return;
       }
-      // Full tests and mixed review use no additional filters (all subjects/difficulties)
 
-      const questions = await fetchQuestions(filters);
+      // Create server-backed session
+      const { session, questions } = await createSession({
+        sessionType,
+        testType: testType,
+        subject: selectedSubject !== 'all' ? selectedSubject : undefined,
+        difficulty: selectedDifficulty !== 'all' ? selectedDifficulty : undefined
+      });
 
       if (questions.length === 0) {
         toast({
@@ -77,6 +63,7 @@ const PracticeSelection = ({ testType }: PracticeSelectionProps) => {
       dispatch({
         type: 'START_SESSION',
         payload: {
+          serverSessionId: session.id,
           testType: testType,
           sessionType,
           subject: (selectedSubject !== 'all' ? selectedSubject : 'Math') as 'Math' | 'Verbal' | 'Reading',
@@ -84,7 +71,7 @@ const PracticeSelection = ({ testType }: PracticeSelectionProps) => {
           questions: questions
         }
       });
-      navigate(`/dashboard/practice/session/${Date.now()}`);
+      navigate(`/practice/session/${session.id}`);
     } catch (error) {
       console.error('Error starting practice session:', error);
       toast({

@@ -40,6 +40,7 @@ export interface UserAnswer {
 
 export interface PracticeSession {
   id: string;
+  serverSessionId?: string; // Server-backed session ID for auto-save and persistence
   testType: 'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS';
   sessionType: 'full_test' | 'subject_practice' | 'topic_practice' | 'mixed_review';
   subject?: 'Math' | 'Verbal' | 'Reading';
@@ -111,7 +112,7 @@ export type AppAction =
   | { type: 'SET_TOPIC_FILTER'; payload: string }
   | { type: 'SET_DIFFICULTY_FILTER'; payload: string }
   | { type: 'SET_TIME_PERIOD'; payload: string }
-  | { type: 'START_SESSION'; payload: Omit<PracticeSession, 'id' | 'userAnswers' | 'currentQuestion' | 'startTime' | 'sessionTime' | 'isPaused' | 'isCompleted'> }
+  | { type: 'START_SESSION'; payload: Omit<PracticeSession, 'id' | 'userAnswers' | 'currentQuestion' | 'startTime' | 'sessionTime' | 'isPaused' | 'isCompleted'> & { serverSessionId?: string } }
   | { type: 'ANSWER_QUESTION'; payload: { questionId: string; answer: UserAnswer } }
   | { type: 'GO_TO_QUESTION'; payload: number }
   | { type: 'TOGGLE_FLAG'; payload: string }

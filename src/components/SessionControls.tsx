@@ -41,95 +41,129 @@ export function SessionControls() {
   };
 
   const handleComplete = async () => {
-    // Complete the session in state
     dispatch({ type: 'COMPLETE_SESSION' });
-    
-    // Save session to database if user is authenticated
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
+
+    if (session.serverSessionId) {
       try {
-        // Save practice session
-        const { data: savedSession, error: sessionError } = await supabase
-          .from('practice_sessions')
-          .insert({
-            user_id: user.id,
-            test_type: session.testType,
-            session_type: session.sessionType,
-            subject: session.subject || null,
-            topic: session.topic || null,
-            difficulty: session.difficulty || null,
-            total_questions: session.questions.length,
-            status: 'completed',
-            end_time: new Date().toISOString(),
-            total_time_spent: session.sessionTime
-          })
-          .select()
-          .single();
-
-        if (sessionError) {
-          console.error('Error saving session:', sessionError);
-          throw sessionError;
-        }
-
-        // Save user answers
-        const answersToSave = Object.entries(session.userAnswers)
-          .filter(([_, answer]) => answer.selectedAnswer)
-          .map(([questionId, answer]) => {
-            const question = session.questions.find(q => q.id === questionId);
-            const isCorrect = question ? answer.selectedAnswer === question.correctAnswer : false;
-            
-            return {
-              session_id: savedSession.id,
-              question_id: questionId,
-              user_answer: answer.selectedAnswer,
-              is_correct: isCorrect,
-              is_flagged: answer.isFlagged || false,
-              time_spent: answer.timeSpent || 0
-            };
-          });
-
-        if (answersToSave.length > 0) {
-          const { error: answersError } = await supabase
-            .from('user_answers')
-            .insert(answersToSave);
-
-          if (answersError) {
-            console.error('Error saving answers:', answersError);
+        console.log('Completing server session:', session.serverSessionId);
+        
+        // Complete server session
+        const { error: completeError } = await supabase.functions.invoke('complete-session', {
+          body: {
+            sessionId: session.serverSessionId,
+            totalTimeSpent: session.sessionTime
           }
-        }
+        });
 
-        // Call complete-session function
-        try {
-          await supabase.functions.invoke('complete-session', {
-            body: {
-              sessionId: savedSession.id,
-              totalTimeSpent: session.sessionTime
-            }
-          });
-        } catch (functionError) {
-          console.error('Error calling complete-session function:', functionError);
+        if (completeError) {
+          console.error('Error completing session:', completeError);
+          throw completeError;
         }
 
         toast({
-          title: "Practice Completed!",
-          description: "Your results have been saved.",
+          title: "Session completed!",
+          description: "Your progress has been saved."
         });
 
-        navigate(`/results/${savedSession.id}`);
+        navigate(`/results/${session.serverSessionId}`);
       } catch (error) {
         console.error('Error completing session:', error);
         toast({
-          title: "Save Error",
-          description: "Your practice was completed but results couldn't be saved.",
+          title: "Save failed",
+          description: "Your session couldn't be completed. Your local progress is preserved.",
           variant: "destructive"
         });
-        
-        // Still navigate to results even if save failed
-        navigate(`/results/${session.id}`);
+        // Navigate to results even if saving failed
+        navigate(`/results/${session.serverSessionId || session.id}`);
       }
     } else {
-      // Not authenticated, just go to results
-      navigate(`/results/${session.id}`);
+      // Fallback: save session manually for non-server sessions  
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        try {
+          // Save practice session
+          const { data: savedSession, error: sessionError } = await supabase
+            .from('practice_sessions')
+            .insert({
+              user_id: user.id,
+              test_type: session.testType,
+              session_type: session.sessionType,
+              subject: session.subject || null,
+              topic: session.topic || null,
+              difficulty: session.difficulty || null,
+              total_questions: session.questions.length,
+              status: 'completed',
+              end_time: new Date().toISOString(),
+              total_time_spent: session.sessionTime
+            })
+            .select()
+            .single();
+
+          if (sessionError) {
+            console.error('Error saving session:', sessionError);
+            throw sessionError;
+          }
+
+          // Save user answers
+          const answersToSave = Object.entries(session.userAnswers)
+            .filter(([_, answer]) => answer.selectedAnswer)
+            .map(([questionId, answer]) => {
+              const question = session.questions.find(q => q.id === questionId);
+              const isCorrect = question ? answer.selectedAnswer === question.correctAnswer : false;
+              
+              return {
+                session_id: savedSession.id,
+                question_id: questionId,
+                user_answer: answer.selectedAnswer,
+                is_correct: isCorrect,
+                is_flagged: answer.isFlagged || false,
+                time_spent: answer.timeSpent || 0
+              };
+            });
+
+          if (answersToSave.length > 0) {
+            const { error: answersError } = await supabase
+              .from('user_answers')
+              .insert(answersToSave);
+
+            if (answersError) {
+              console.error('Error saving answers:', answersError);
+            }
+          }
+
+          // Call complete-session function
+          try {
+            await supabase.functions.invoke('complete-session', {
+              body: {
+                sessionId: savedSession.id,
+                totalTimeSpent: session.sessionTime
+              }
+            });
+          } catch (functionError) {
+            console.error('Error calling complete-session function:', functionError);
+          }
+
+          toast({
+            title: "Practice Completed!",
+            description: "Your results have been saved.",
+          });
+
+          navigate(`/results/${savedSession.id}`);
+        } catch (error) {
+          console.error('Error completing session:', error);
+          toast({
+            title: "Save Error",
+            description: "Your practice was completed but results couldn't be saved.",
+            variant: "destructive"
+          });
+          
+          // Still navigate to results even if save failed
+          navigate(`/results/${session.id}`);
+        }
+      } else {
+        // Not authenticated, just go to results
+        navigate(`/results/${session.id}`);
+      }
     }
   };
 

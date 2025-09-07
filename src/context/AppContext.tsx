@@ -72,7 +72,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
         startTime: new Date(),
         sessionTime: 0,
         isPaused: false,
-        isCompleted: false
+        isCompleted: false,
+        serverSessionId: action.payload.serverSessionId // Include server session ID
       };
 
       return { ...state, practiceSession: session };

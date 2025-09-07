@@ -15,12 +15,14 @@ import { useQuestionCount } from "@/hooks/useQuestionCount";
 import { useRecentPractice } from "@/hooks/useRecentPractice";
 import { formatDistance } from 'date-fns';
 import { toast } from "@/hooks/use-toast";
+import { useServerSession } from "@/hooks/useServerSession";
 
 const Practice = () => {
   const { state, dispatch } = useApp();
   const navigate = useNavigate();
   const { fetchQuestions, loading } = useSupabaseQuestions();
   const { isAuthenticated, requireAuth } = useAuth();
+  const { createSession } = useServerSession();
   const [selectedTestType, setSelectedTestType] = useState<'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS'>(state.user?.selectedTest || 'SHSAT');
   const [selectedSubject, setSelectedSubject] = useState<string>('all');
   const [selectedTopic, setSelectedTopic] = useState<string>('all');
@@ -121,26 +123,14 @@ const Practice = () => {
     try {
       console.log('Starting practice session with:', { sessionType, questionCount, filters: filtersToUse });
       
-      const filters: any = {
+      // Create server-backed session
+      const { session, questions } = await createSession({
+        sessionType,
         testType: filtersToUse.testType,
-        count: questionCount,
-        avoidRecent: true,
-        strict: true
-      };
-
-      if (filtersToUse.subject && filtersToUse.subject !== 'all') {
-        filters.subject = filtersToUse.subject;
-      }
-      if (filtersToUse.topic && filtersToUse.topic !== 'all') {
-        filters.topic = filtersToUse.topic;
-      }
-      if (filtersToUse.difficulty && filtersToUse.difficulty !== 'all') {
-        filters.difficulty = filtersToUse.difficulty;
-      }
-
-      console.log('Fetching questions with filters:', filters);
-      const questions = await fetchQuestions(filters);
-      console.log('Fetched questions:', questions);
+        subject: filtersToUse.subject !== 'all' ? filtersToUse.subject : undefined,
+        topic: filtersToUse.topic !== 'all' ? filtersToUse.topic : undefined,
+        difficulty: filtersToUse.difficulty !== 'all' ? filtersToUse.difficulty : undefined
+      });
 
       if (questions.length === 0) {
         toast({
@@ -155,6 +145,7 @@ const Practice = () => {
       dispatch({
         type: 'START_SESSION',
         payload: {
+          serverSessionId: session.id,
           testType: filtersToUse.testType as 'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS',
           sessionType,
           subject: (filtersToUse.subject !== 'all' ? filtersToUse.subject : 'Math') as 'Math' | 'Verbal' | 'Reading',
@@ -162,7 +153,7 @@ const Practice = () => {
           questions: questions
         }
       });
-      navigate(`/dashboard/practice/session/${Date.now()}`);
+      navigate(`/practice/session/${session.id}`);
     } catch (error) {
       console.error('Error starting practice session:', error);
       toast({
