@@ -217,7 +217,7 @@ const Dashboard = () => {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {state.practiceSession && !state.practiceSession.isCompleted ? (
-              <Link to={`/dashboard/practice/session/${state.practiceSession.id}`}>
+              <Link to={`/practice/session/${state.practiceSession.serverSessionId || state.practiceSession.id}`}>
                 <Button className="w-full h-20 flex flex-col items-center justify-center space-y-2">
                   <Play className="h-6 w-6" />
                   <span>Continue Last Session</span>

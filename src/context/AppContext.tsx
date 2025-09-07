@@ -369,7 +369,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Auto-save practice session to localStorage
+  // Auto-save practice session to localStorage and hydrate on startup
   useEffect(() => {
     if (state.practiceSession && !state.practiceSession.isCompleted) {
       localStorage.setItem('practiceSession', JSON.stringify(state.practiceSession));
@@ -377,6 +377,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem('practiceSession');
     }
   }, [state.practiceSession]);
+
+  // Hydrate practice session from localStorage on app startup
+  useEffect(() => {
+    const savedSession = localStorage.getItem('practiceSession');
+    if (savedSession && !state.practiceSession) {
+      try {
+        const parsedSession = JSON.parse(savedSession);
+        console.log('Hydrating session from localStorage:', parsedSession.id);
+        dispatch({
+          type: 'START_SESSION',
+          payload: parsedSession
+        });
+      } catch (error) {
+        console.error('Error parsing saved session:', error);
+        localStorage.removeItem('practiceSession');
+      }
+    }
+  }, [state.practiceSession, dispatch]);
 
   // Timer effect for practice sessions
   useEffect(() => {

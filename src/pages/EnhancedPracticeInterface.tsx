@@ -54,15 +54,133 @@ const EnhancedPracticeInterface = () => {
 
   const session = state.practiceSession;
 
-  // Initialize session if not exists - but don't auto-fetch, just set initializing to false
+  // Initialize session from server if not exists in memory
   useEffect(() => {
-    if (!session && sessionId) {
-      // Session not found, we'll show the "Session Not Found" message
-      setIsInitializing(false);
-    } else {
-      setIsInitializing(false);
-    }
-  }, [session, sessionId]);
+    const loadSessionFromServer = async () => {
+      if (!sessionId || session || !isAuthenticated) {
+        setIsInitializing(false);
+        return;
+      }
+
+      console.log('Loading session from server:', sessionId);
+
+      try {
+        // Fetch session from database
+        const { data: serverSessionData, error: sessionError } = await supabase
+          .from('practice_sessions')
+          .select('*')
+          .eq('id', sessionId)
+          .eq('user_id', user?.id)
+          .single();
+
+        if (sessionError || !serverSessionData) {
+          console.error('Session not found:', sessionError);
+          setIsInitializing(false);
+          return;
+        }
+
+        console.log('Server session loaded:', serverSessionData);
+
+        // Fetch questions using the same criteria as the session
+        const { data: questionsData, error: questionsError } = await supabase.functions.invoke('get-questions', {
+          body: {
+            testType: serverSessionData.test_type,
+            sessionType: serverSessionData.session_type,
+            subject: serverSessionData.subject,
+            topic: serverSessionData.topic,
+            difficulty: serverSessionData.difficulty,
+            questionCount: serverSessionData.total_questions
+          }
+        });
+
+        if (questionsError || !questionsData?.questions) {
+          console.error('Failed to fetch questions:', questionsError);
+          toast({
+            title: "Error Loading Session",
+            description: "Failed to load practice questions.",
+            variant: "destructive"
+          });
+          setIsInitializing(false);
+          return;
+        }
+
+        console.log('Questions loaded:', questionsData.questions.length);
+
+        // Fetch user answers for this session
+        const { data: userAnswersData, error: answersError } = await supabase
+          .from('user_answers')
+          .select('*')
+          .eq('session_id', sessionId);
+
+        if (answersError) {
+          console.error('Failed to fetch user answers:', answersError);
+        }
+
+        // Convert user answers to the format expected by the app
+        const userAnswers: { [questionId: string]: any } = {};
+        userAnswersData?.forEach(answer => {
+          userAnswers[answer.question_id] = {
+            questionId: answer.question_id,
+            selectedAnswer: answer.user_answer,
+            timeSpent: answer.time_spent || 0,
+            isFlagged: answer.is_flagged || false
+          };
+        });
+
+        console.log('User answers loaded:', Object.keys(userAnswers).length);
+
+        // Calculate elapsed time since session start
+        const startTime = new Date(serverSessionData.start_time);
+        const now = new Date();
+        const sessionTime = serverSessionData.status === 'completed' 
+          ? serverSessionData.total_time_spent 
+          : Math.floor((now.getTime() - startTime.getTime()) / 1000);
+
+        // Create practice session object to match app state
+        const recoveredSession = {
+          id: serverSessionData.id,
+          serverSessionId: serverSessionData.id,
+          testType: serverSessionData.test_type as 'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS',
+          sessionType: serverSessionData.session_type as 'full_test' | 'subject_practice' | 'topic_practice' | 'mixed_review',
+          subject: (serverSessionData.subject || 'Math') as 'Math' | 'Verbal' | 'Reading',
+          topic: serverSessionData.topic || '',
+          difficulty: (serverSessionData.difficulty || 'Medium') as 'Easy' | 'Medium' | 'Hard',
+          questions: questionsData.questions,
+          userAnswers,
+          currentQuestion: serverSessionData.current_question_index || 0,
+          startTime: startTime,
+          sessionTime,
+          isPaused: serverSessionData.status === 'paused',
+          isCompleted: serverSessionData.status === 'completed'
+        };
+
+        // Dispatch to app context to hydrate the session
+        dispatch({
+          type: 'START_SESSION',
+          payload: recoveredSession
+        });
+
+        console.log('Session recovery completed');
+
+        toast({
+          title: "Session Loaded",
+          description: "Your practice session has been restored.",
+        });
+
+      } catch (error) {
+        console.error('Error loading session:', error);
+        toast({
+          title: "Error Loading Session",
+          description: "Failed to load your practice session.",
+          variant: "destructive"
+        });
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+
+    loadSessionFromServer();
+  }, [sessionId, session, isAuthenticated, user, dispatch]);
 
   // Show pause overlay when session is paused
   useEffect(() => {
