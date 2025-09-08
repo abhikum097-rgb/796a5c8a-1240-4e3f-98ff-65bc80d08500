@@ -62,7 +62,7 @@ serve(async (req) => {
       throw new Error('Session not found or access denied');
     }
 
-    // Insert or update user answer
+    // Insert or update user answer with proper conflict resolution
     const { data: answer, error: answerError } = await supabase
       .from('user_answers')
       .upsert({
@@ -74,6 +74,9 @@ serve(async (req) => {
         is_flagged: isFlagged,
         confidence_level: confidenceLevel,
         answered_at: new Date().toISOString()
+      }, {
+        onConflict: 'session_id,question_id',
+        ignoreDuplicates: false
       })
       .select()
       .single();
@@ -83,16 +86,19 @@ serve(async (req) => {
       throw answerError;
     }
 
-    // Update session progress
+    // Update session progress - count unique answered questions
     const { data: answersCount } = await supabase
       .from('user_answers')
-      .select('id')
+      .select('question_id')
       .eq('session_id', sessionId);
+
+    const uniqueAnsweredQuestions = new Set(answersCount?.map(a => a.question_id) || []).size;
 
     const { error: updateError } = await supabase
       .from('practice_sessions')
       .update({
-        current_question_index: answersCount?.length || 0
+        current_question_index: uniqueAnsweredQuestions,
+        total_time_spent: Math.floor((Date.now() - new Date(session.start_time).getTime()) / 1000)
       })
       .eq('id', sessionId);
 

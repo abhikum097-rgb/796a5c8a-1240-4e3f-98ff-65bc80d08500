@@ -1,239 +1,246 @@
-import { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  Flag, 
-  Play, 
-  Pause,
-  Square,
-  AlertTriangle,
-  BookOpen,
-  CheckCircle
-} from "lucide-react";
-import { useApp } from "@/context/AppContext";
-import { QuestionNavigator } from "@/components/QuestionNavigator";
-import { SessionControls } from "@/components/SessionControls";
-import { DifficultyBadge } from "@/components/DifficultyBadge";
-import { useSupabaseQuestions } from "@/hooks/useSupabaseQuestions";
-import { useServerSession } from "@/hooks/useServerSession";
-import { useAuth } from "@/hooks/useAuth";
-import { PracticeLoadingSkeleton } from "@/components/PracticeSkeletons";
-import { SubmitConfirmationDialog } from "@/components/SubmitConfirmationDialog";
-import { EnhancedReadingView } from "@/components/EnhancedReadingView";
-
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { ChevronLeft, ChevronRight, Flag, Play, Pause, LogOut, Check, X, Clock, Target, AlertCircle, Settings, CheckCircle, Save, AlertTriangle } from 'lucide-react';
+import { useApp } from '@/context/AppContext';
+import { useAuth } from '@/hooks/useAuth';
+import { useServerSession } from '@/hooks/useServerSession';
+import { Question, UserAnswer } from '@/types/app';
+import { DifficultyBadge } from '@/components/DifficultyBadge';
+import { QuestionNavigator } from '@/components/QuestionNavigator';
+import { SessionControls } from '@/components/SessionControls';
+import { EnhancedReadingView } from '@/components/EnhancedReadingView';
+import { PracticeLoadingSkeleton } from '@/components/PracticeSkeletons';
+import { SubmitConfirmationDialog } from '@/components/SubmitConfirmationDialog';
+import { DebugPanel } from '@/components/DebugPanel';
+import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 const EnhancedPracticeInterface = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
-  const { state, dispatch } = useApp();
-  const { fetchQuestions, loading: questionsLoading } = useSupabaseQuestions();
-  const { user, isAuthenticated } = useAuth();
-  const { session: serverSession, loading: serverLoading, submitAnswer, updateSessionProgress } = useServerSession();
+  const { state, dispatch, isDebugMode } = useApp();
+  const { user, requireAuth } = useAuth();
+  const { loadSession, submitAnswer, updateSessionProgress } = useServerSession();
   
   const [showExitDialog, setShowExitDialog] = useState(false);
-  const [showPauseOverlay, setShowPauseOverlay] = useState(false);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(true);
-  const [lastSavedAnswer, setLastSavedAnswer] = useState<string | null>(null);
+  const [showPauseOverlay, setShowPauseOverlay] = useState(false);
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [questionsLoading, setQuestionsLoading] = useState(false);
+  const [sessionNotFound, setSessionNotFound] = useState(false);
+  const [lastSaveTime, setLastSaveTime] = useState<number>(0);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
 
-  const session = state.practiceSession;
+  const practiceSession = state.practiceSession;
 
-  // Initialize session from server if not exists in memory
+  // Enhanced session recovery - load from server if needed
   useEffect(() => {
-    const loadSessionFromServer = async () => {
-      if (!sessionId || session || !isAuthenticated) {
-        setIsInitializing(false);
+    const initializeSession = async () => {
+      console.group('🔄 Initializing practice session');
+      console.log('URL sessionId:', sessionId);
+      console.log('Current session in state:', practiceSession?.id);
+      console.log('Server session ID in state:', practiceSession?.serverSessionId);
+      
+      if (!sessionId) {
+        console.log('❌ No sessionId in URL');
+        setSessionNotFound(true);
+        setSessionLoading(false);
+        console.groupEnd();
         return;
       }
 
-      console.log('Loading session from server:', sessionId);
+      // If we have a session with matching server ID, we're good
+      if (practiceSession && practiceSession.serverSessionId === sessionId) {
+        console.log('✅ Session already loaded and matches URL');
+        setSessionLoading(false);
+        console.groupEnd();
+        return;
+      }
 
+      // Try to load session from server
+      console.log('📡 Loading session from server...');
+      setQuestionsLoading(true);
+      
       try {
-        // Fetch session from database
-        const { data: serverSessionData, error: sessionError } = await supabase
-          .from('practice_sessions')
+        // Load server session data
+        const serverSession = await loadSession(sessionId);
+        
+        // Fetch questions in the exact order they were presented
+        console.log('📋 Fetching questions in original order...');
+        const { data: questionsData, error: questionsError } = await supabase
+          .from('questions')
           .select('*')
-          .eq('id', sessionId)
-          .eq('user_id', user?.id)
-          .single();
+          .in('id', serverSession.questions_order);
 
-        if (sessionError || !serverSessionData) {
-          console.error('Session not found:', sessionError);
-          setIsInitializing(false);
-          return;
+        if (questionsError) {
+          throw new Error('Failed to load session questions');
         }
 
-        console.log('Server session loaded:', serverSessionData);
+        // Sort questions to match the original order
+        const sortedQuestions = serverSession.questions_order.map(qId => 
+          questionsData.find(q => q.id === qId)
+        ).filter(Boolean);
 
-        // Fetch questions using the same criteria as the session
-        const { data: questionsData, error: questionsError } = await supabase.functions.invoke('get-questions', {
-          body: {
-            testType: serverSessionData.test_type,
-            sessionType: serverSessionData.session_type,
-            subject: serverSessionData.subject,
-            topic: serverSessionData.topic,
-            difficulty: serverSessionData.difficulty,
-            questionCount: serverSessionData.total_questions
-          }
-        });
-
-        if (questionsError || !questionsData?.questions) {
-          console.error('Failed to fetch questions:', questionsError);
-          toast({
-            title: "Error Loading Session",
-            description: "Failed to load practice questions.",
-            variant: "destructive"
-          });
-          setIsInitializing(false);
-          return;
-        }
-
-        console.log('Questions loaded:', questionsData.questions.length);
-
-        // Fetch user answers for this session
-        const { data: userAnswersData, error: answersError } = await supabase
+        // Fetch existing user answers
+        console.log('📝 Fetching existing user answers...');
+        const { data: answersData, error: answersError } = await supabase
           .from('user_answers')
           .select('*')
           .eq('session_id', sessionId);
 
         if (answersError) {
-          console.error('Failed to fetch user answers:', answersError);
+          console.error('Error fetching answers:', answersError);
         }
 
-        // Convert user answers to the format expected by the app
-        const userAnswers: { [questionId: string]: any } = {};
-        userAnswersData?.forEach(answer => {
-          userAnswers[answer.question_id] = {
-            questionId: answer.question_id,
-            selectedAnswer: answer.user_answer,
-            timeSpent: answer.time_spent || 0,
-            isFlagged: answer.is_flagged || false
-          };
+        // Convert to app format
+        const userAnswers: Record<string, UserAnswer> = {};
+        (answersData || []).forEach(answer => {
+          if (answer.question_id) {
+            userAnswers[answer.question_id] = {
+              questionId: answer.question_id,
+              selectedAnswer: answer.user_answer as 'A' | 'B' | 'C' | 'D',
+              timeSpent: answer.time_spent || 0,
+              isFlagged: answer.is_flagged || false,
+              confidence: answer.confidence_level as 'Low' | 'Medium' | 'High' | undefined
+            };
+          }
         });
 
-        console.log('User answers loaded:', Object.keys(userAnswers).length);
-
-        // Calculate elapsed time since session start
-        const startTime = new Date(serverSessionData.start_time);
-        const now = new Date();
-        const sessionTime = serverSessionData.status === 'completed' 
-          ? serverSessionData.total_time_spent 
-          : Math.floor((now.getTime() - startTime.getTime()) / 1000);
-
-        // Create practice session object to match app state
+        // Create complete session object for hydration
         const recoveredSession = {
-          id: serverSessionData.id,
-          serverSessionId: serverSessionData.id,
-          testType: serverSessionData.test_type as 'SHSAT' | 'SSAT' | 'ISEE' | 'HSPT' | 'TACHS',
-          sessionType: serverSessionData.session_type as 'full_test' | 'subject_practice' | 'topic_practice' | 'mixed_review',
-          subject: (serverSessionData.subject || 'Math') as 'Math' | 'Verbal' | 'Reading',
-          topic: serverSessionData.topic || '',
-          difficulty: (serverSessionData.difficulty || 'Medium') as 'Easy' | 'Medium' | 'Hard',
-          questions: questionsData.questions,
+          id: practiceSession?.id || `session_${Date.now()}`,
+          serverSessionId: serverSession.id,
+          testType: serverSession.test_type as any,
+          sessionType: serverSession.session_type as any,
+          subject: serverSession.subject as any,
+          topic: serverSession.topic,
+          difficulty: serverSession.difficulty as any,
+          questions: sortedQuestions.map(q => ({
+            id: q.id,
+            testType: q.test_type,
+            subject: q.subject,
+            topic: q.topic,
+            difficulty: q.difficulty_level as 'Easy' | 'Medium' | 'Hard',
+            questionText: q.question_text,
+            questionImages: q.question_images,
+            passage: q.passage,
+            options: {
+              A: q.option_a,
+              B: q.option_b,
+              C: q.option_c,
+              D: q.option_d
+            },
+            correctAnswer: q.correct_answer as 'A' | 'B' | 'C' | 'D',
+            explanation: q.explanation,
+            timeAllocated: q.time_allocated || 60
+          })),
           userAnswers,
-          currentQuestion: serverSessionData.current_question_index || 0,
-          startTime: startTime,
-          sessionTime,
-          isPaused: serverSessionData.status === 'paused',
-          isCompleted: serverSessionData.status === 'completed'
+          currentQuestion: serverSession.current_question_index || 0,
+          startTime: new Date(serverSession.start_time),
+          endTime: serverSession.end_time ? new Date(serverSession.end_time) : undefined,
+          sessionTime: serverSession.total_time_spent || 0,
+          isPaused: serverSession.status === 'paused',
+          isCompleted: serverSession.status === 'completed',
+          score: serverSession.score
         };
 
-        // Dispatch to app context to hydrate the session
-        dispatch({
-          type: 'START_SESSION',
-          payload: recoveredSession
-        });
+        console.log('✅ Session recovered successfully');
+        console.log('Questions loaded:', recoveredSession.questions.length);
+        console.log('Answers loaded:', Object.keys(recoveredSession.userAnswers).length);
+        console.log('Current question index:', recoveredSession.currentQuestion);
 
-        console.log('Session recovery completed');
-
+        // Hydrate the session (don't use START_SESSION as it resets progress)
+        dispatch({ type: 'HYDRATE_SESSION', payload: recoveredSession });
+        
         toast({
-          title: "Session Loaded",
-          description: "Your practice session has been restored.",
+          title: "Session restored",
+          description: `Loaded ${recoveredSession.questions.length} questions with ${Object.keys(recoveredSession.userAnswers).length} saved answers`
         });
-
+        
       } catch (error) {
-        console.error('Error loading session:', error);
+        console.error('❌ Failed to recover session:', error);
+        setSessionNotFound(true);
         toast({
-          title: "Error Loading Session",
-          description: "Failed to load your practice session.",
+          title: "Session recovery failed",
+          description: "Could not load your practice session. Please start a new one.",
           variant: "destructive"
         });
       } finally {
-        setIsInitializing(false);
+        setSessionLoading(false);
+        setQuestionsLoading(false);
+        console.groupEnd();
       }
     };
 
-    loadSessionFromServer();
-  }, [sessionId, session, isAuthenticated, user, dispatch]);
+    initializeSession();
+  }, [sessionId, practiceSession, loadSession, dispatch]);
 
   // Show pause overlay when session is paused
   useEffect(() => {
-    setShowPauseOverlay(session?.isPaused || false);
-  }, [session?.isPaused]);
+    setShowPauseOverlay(practiceSession?.isPaused || false);
+  }, [practiceSession?.isPaused]);
 
-  // Auto-save answers when they change
-  const currentQuestion = session?.questions[session.currentQuestion];
-  const currentAnswer = session?.userAnswers[currentQuestion?.id];
+  // Debounced auto-save function
+  const debouncedAutoSave = useCallback(
+    async (questionId: string, answer: UserAnswer, isCorrect: boolean) => {
+      if (!practiceSession?.serverSessionId || !user) return;
 
-  // Auto-save to server when answers change
-  useEffect(() => {
-    if (!currentQuestion || !currentAnswer?.selectedAnswer || !serverSession || !isAuthenticated) return;
-    
-    const answerKey = `${currentQuestion.id}-${currentAnswer.selectedAnswer}`;
-    if (answerKey === lastSavedAnswer) return; // Avoid duplicate saves
-    
-    const timeoutId = setTimeout(() => {
-      const isCorrect = currentAnswer.selectedAnswer === currentQuestion.correctAnswer;
+      setSaveStatus('saving');
       
-      submitAnswer({
-        sessionId: serverSession.id,
-        questionId: currentQuestion.id,
-        userAnswer: currentAnswer.selectedAnswer,
-        timeSpent: currentAnswer.timeSpent || 0,
-        isCorrect,
-        isFlagged: currentAnswer.isFlagged
-      });
-      
-      setLastSavedAnswer(answerKey);
-      
-      // Show subtle save indicator
-      toast({
-        title: "Answer saved",
-        description: "Your progress is automatically saved.",
-        duration: 2000,
-      });
-    }, 1000); // Debounce saves by 1 second
-    
-    return () => clearTimeout(timeoutId);
-  }, [currentAnswer?.selectedAnswer, currentAnswer?.isFlagged, currentQuestion, serverSession, submitAnswer, lastSavedAnswer, isAuthenticated]);
+      try {
+        console.log('💾 Auto-saving answer for question:', questionId);
+        await submitAnswer({
+          sessionId: practiceSession.serverSessionId,
+          questionId,
+          userAnswer: answer.selectedAnswer,
+          timeSpent: answer.timeSpent,
+          isCorrect,
+          isFlagged: answer.isFlagged
+        });
 
-  // Update server session progress when question changes
-  useEffect(() => {
-    if (session && serverSession && isAuthenticated) {
-      updateSessionProgress(serverSession.id, session.currentQuestion);
-    }
-  }, [session?.currentQuestion, serverSession, updateSessionProgress, isAuthenticated]);
+        await updateSessionProgress(
+          practiceSession.serverSessionId, 
+          practiceSession.currentQuestion
+        );
+
+        setLastSaveTime(Date.now());
+        setSaveStatus('saved');
+        
+        // Clear save status after 2 seconds
+        setTimeout(() => setSaveStatus(null), 2000);
+        
+      } catch (error) {
+        console.error('Auto-save failed:', error);
+        setSaveStatus('error');
+        setTimeout(() => setSaveStatus(null), 3000);
+        
+        toast({
+          title: "Save failed",
+          description: "Could not save your answer. Please check your connection.",
+          variant: "destructive"
+        });
+      }
+    }, 
+    [practiceSession?.serverSessionId, practiceSession?.currentQuestion, user, submitAnswer, updateSessionProgress]
+  );
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      if (!session || session.isPaused) return;
+      if (!practiceSession || practiceSession.isPaused) return;
+      
+      // Debug panel shortcut
+      if (e.key === 'F12' && isDebugMode) {
+        e.preventDefault();
+        setShowDebugPanel(!showDebugPanel);
+        return;
+      }
       
       switch (e.key.toLowerCase()) {
         case 'arrowleft':
@@ -248,25 +255,27 @@ const EnhancedPracticeInterface = () => {
         case 'b':
         case 'c':
         case 'd':
-          if (e.target instanceof HTMLElement && e.target.tagName !== 'INPUT') {
+          if (e.target instanceof HTMLElement && !['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
             e.preventDefault();
             handleAnswerSelect(e.key.toUpperCase() as 'A' | 'B' | 'C' | 'D');
           }
           break;
         case 'f':
-          e.preventDefault();
-          handleFlag();
+          if (e.target instanceof HTMLElement && !['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
+            e.preventDefault();
+            handleFlag();
+          }
           break;
         case ' ':
-          if (e.target instanceof HTMLElement && e.target.tagName !== 'INPUT') {
+          if (e.target instanceof HTMLElement && !['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
             e.preventDefault();
             handlePauseResume();
           }
           break;
         case 'enter':
-          if (e.target instanceof HTMLElement && e.target.tagName !== 'INPUT') {
+          if (e.target instanceof HTMLElement && !['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
             e.preventDefault();
-            if (session.currentQuestion === session.questions.length - 1) {
+            if (practiceSession.currentQuestion === practiceSession.questions.length - 1) {
               handleFinishPractice();
             } else {
               handleNext();
@@ -278,62 +287,108 @@ const EnhancedPracticeInterface = () => {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [session]);
+  }, [practiceSession, showDebugPanel, isDebugMode]);
 
-  if (isInitializing || questionsLoading || serverLoading) {
+  if (sessionLoading || questionsLoading) {
     return <PracticeLoadingSkeleton />;
   }
 
-  if (!session) {
+  if (sessionNotFound) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">Session Not Found</h2>
-          <Button onClick={() => navigate('/practice')}>
-            Return to Practice
-          </Button>
-        </div>
+        <Card className="w-96">
+          <CardHeader className="text-center">
+            <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
+            <CardTitle>Session Not Found</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <p className="text-muted-foreground">
+              We couldn't find your practice session. It may have expired or been removed.
+            </p>
+            <div className="space-y-2">
+              <Button onClick={() => navigate('/practice')} className="w-full">
+                Start New Practice
+              </Button>
+              <Button onClick={() => navigate('/dashboard')} variant="outline" className="w-full">
+                Back to Dashboard
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
+  if (!practiceSession) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Card className="w-96">
+          <CardHeader className="text-center">
+            <AlertCircle className="h-12 w-12 mx-auto mb-4 text-warning" />
+            <CardTitle>No Active Session</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <p className="text-muted-foreground">
+              No practice session is currently active.
+            </p>
+            <Button onClick={() => navigate('/practice')} className="w-full">
+              Start Practice
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const currentQuestion = practiceSession.questions[practiceSession.currentQuestion];
+  const currentAnswer = practiceSession.userAnswers[currentQuestion?.id];
+
   const handleAnswerSelect = (answer: 'A' | 'B' | 'C' | 'D') => {
     if (!currentQuestion) return;
+
+    const isCorrect = answer === currentQuestion.correctAnswer;
+    const updatedAnswer: UserAnswer = {
+      questionId: currentQuestion.id,
+      selectedAnswer: answer,
+      timeSpent: currentAnswer?.timeSpent || 0,
+      isFlagged: currentAnswer?.isFlagged || false,
+      confidence: currentAnswer?.confidence
+    };
+
+    dispatch({ type: 'ANSWER_QUESTION', payload: { questionId: currentQuestion.id, answer: updatedAnswer } });
     
-    dispatch({
-      type: 'ANSWER_QUESTION',
-      payload: {
-        questionId: currentQuestion.id,
-        answer: {
-          questionId: currentQuestion.id,
-          selectedAnswer: answer,
-          timeSpent: 0,
-          isFlagged: currentAnswer?.isFlagged || false
-        }
-      }
-    });
-  };
-
-  const handlePrevious = () => {
-    if (session.currentQuestion > 0) {
-      dispatch({ type: 'GO_TO_QUESTION', payload: session.currentQuestion - 1 });
-    }
-  };
-
-  const handleNext = () => {
-    if (session.currentQuestion < session.questions.length - 1) {
-      dispatch({ type: 'GO_TO_QUESTION', payload: session.currentQuestion + 1 });
+    // Auto-save to server with debouncing
+    if (practiceSession.serverSessionId) {
+      debouncedAutoSave(currentQuestion.id, updatedAnswer, isCorrect);
     }
   };
 
   const handleFlag = () => {
-    if (currentQuestion) {
-      dispatch({ type: 'TOGGLE_FLAG', payload: currentQuestion.id });
+    if (!currentQuestion) return;
+    dispatch({ type: 'TOGGLE_FLAG', payload: currentQuestion.id });
+    
+    // Auto-save flag status
+    if (practiceSession.serverSessionId && currentAnswer) {
+      const updatedAnswer = { ...currentAnswer, isFlagged: !currentAnswer.isFlagged };
+      const isCorrect = currentAnswer.selectedAnswer === currentQuestion.correctAnswer;
+      debouncedAutoSave(currentQuestion.id, updatedAnswer, isCorrect);
+    }
+  };
+
+  const handleNext = () => {
+    if (practiceSession.currentQuestion < practiceSession.questions.length - 1) {
+      dispatch({ type: 'GO_TO_QUESTION', payload: practiceSession.currentQuestion + 1 });
+    }
+  };
+
+  const handlePrevious = () => {
+    if (practiceSession.currentQuestion > 0) {
+      dispatch({ type: 'GO_TO_QUESTION', payload: practiceSession.currentQuestion - 1 });
     }
   };
 
   const handlePauseResume = () => {
-    if (session.isPaused) {
+    if (practiceSession.isPaused) {
       dispatch({ type: 'RESUME_SESSION' });
     } else {
       dispatch({ type: 'PAUSE_SESSION' });
@@ -341,104 +396,46 @@ const EnhancedPracticeInterface = () => {
   };
 
   const handleFinishPractice = () => {
-    // Show confirmation dialog first
     setShowSubmitDialog(true);
   };
 
   const confirmSubmitPractice = async () => {
-    if (!session) return;
-    
-    setShowSubmitDialog(false);
-    
+    if (!practiceSession?.serverSessionId) {
+      navigate('/results', { 
+        state: { 
+          session: practiceSession,
+          isLocalSession: true 
+        } 
+      });
+      return;
+    }
+
     try {
+      // Complete session on server
+      const { data, error } = await supabase.functions.invoke('complete-session', {
+        body: { sessionId: practiceSession.serverSessionId }
+      });
+
+      if (error) {
+        throw error;
+      }
+
       dispatch({ type: 'COMPLETE_SESSION' });
       
-      // Complete server session if available
-      if (session.serverSessionId) {
-        const { error: completeError } = await supabase.functions.invoke('complete-session', {
-          body: {
-            sessionId: session.serverSessionId,
-            totalTimeSpent: session.sessionTime
-          }
-        });
-
-        if (completeError) {
-          console.error('Error completing session:', completeError);
-          throw completeError;
-        }
-
-        toast({
-          title: "Practice Completed!",
-          description: "Your results have been saved and analyzed.",
-        });
-
-        // Navigate to results page using server session ID
-        navigate(`/results/${session.serverSessionId}`);
-      } else {
-        // Fallback: save session manually for non-server sessions
-        if (isAuthenticated && user) {
-          const { data: savedSession, error: sessionError } = await supabase
-            .from('practice_sessions')
-            .insert({
-              user_id: user.id,
-              test_type: session.testType,
-              session_type: session.sessionType,
-              subject: session.subject || null,
-              topic: session.topic || null,
-              difficulty: session.difficulty || null,
-              total_questions: session.questions.length,
-              status: 'completed',
-              end_time: new Date().toISOString(),
-              total_time_spent: session.sessionTime
-            })
-            .select()
-            .single();
-
-          if (sessionError) throw sessionError;
-
-          // Save user answers
-          const answersToSave = Object.entries(session.userAnswers)
-            .filter(([_, answer]) => answer.selectedAnswer)
-            .map(([questionId, answer]) => {
-              const question = session.questions.find(q => q.id === questionId);
-              const isCorrect = question ? answer.selectedAnswer === question.correctAnswer : false;
-              
-              return {
-                session_id: savedSession.id,
-                question_id: questionId,
-                user_answer: answer.selectedAnswer,
-                is_correct: isCorrect,
-                is_flagged: answer.isFlagged || false,
-                time_spent: answer.timeSpent || 0
-              };
-            });
-
-          if (answersToSave.length > 0) {
-            await supabase.from('user_answers').insert(answersToSave);
-          }
-
-          await supabase.functions.invoke('complete-session', {
-            body: {
-              sessionId: savedSession.id,
-              totalTimeSpent: session.sessionTime
-            }
-          });
-
-          navigate(`/results/${savedSession.id}`);
-        } else {
-          // Not authenticated, just go to local results
-          navigate(`/results/${session.id}`);
-        }
-      }
+      navigate('/results', { 
+        state: { 
+          session: practiceSession,
+          serverSessionId: practiceSession.serverSessionId,
+          results: data 
+        } 
+      });
     } catch (error) {
       console.error('Error completing session:', error);
       toast({
-        title: "Error",
-        description: "Failed to complete session. Your progress may not be saved.",
+        title: "Submission failed",
+        description: "Could not complete your session. Please try again.",
         variant: "destructive"
       });
-      // Still navigate to results even if save fails
-      navigate(`/results/${session.serverSessionId || session.id}`);
     }
   };
 
@@ -447,61 +444,95 @@ const EnhancedPracticeInterface = () => {
   };
 
   const confirmExit = () => {
-    navigate('/practice');
+    navigate('/dashboard');
   };
 
   const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
+    const remainingSeconds = seconds % 60;
     
     if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
     }
-    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
-  const answeredCount = Object.keys(session.userAnswers).filter(id => 
-    session.userAnswers[id]?.selectedAnswer
-  ).length;
-  
-  const flaggedCount = Object.keys(session.userAnswers).filter(id => 
-    session.userAnswers[id]?.isFlagged
-  ).length;
+  // Calculate statistics
+  const answeredCount = Object.keys(practiceSession.userAnswers).length;
+  const flaggedCount = Object.values(practiceSession.userAnswers).filter(a => a.isFlagged).length;
+  const progress = (practiceSession.currentQuestion + 1) / practiceSession.questions.length * 100;
 
   return (
-    <div className="h-screen flex flex-col">
-      {/* Enhanced Header */}
-      <div className="border-b bg-card p-4 flex items-center justify-between">
+    <div className="h-screen bg-background flex flex-col">
+      {/* Header */}
+      <div className="border-b bg-card px-6 py-4 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center space-x-4">
           <h1 className="text-xl font-bold">
-            Question {session.currentQuestion + 1} of {session.questions.length}
+            {practiceSession.testType} Practice - {practiceSession.sessionType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
           </h1>
-          {currentQuestion && (
-            <DifficultyBadge difficulty={currentQuestion.difficulty} />
+          {practiceSession.subject && (
+            <Badge variant="secondary">{practiceSession.subject}</Badge>
           )}
-          {currentQuestion?.subject === 'Reading' && (
-            <Badge variant="outline" className="text-xs">
-              <BookOpen className="h-3 w-3 mr-1" />
-              Reading Comprehension
-            </Badge>
+          {practiceSession.topic && (
+            <Badge variant="outline">{practiceSession.topic}</Badge>
           )}
         </div>
         
         <div className="flex items-center space-x-4">
-          <div className="text-sm font-mono bg-muted px-3 py-1 rounded">
-            {formatTime(session.sessionTime)}
-          </div>
-          {isAuthenticated ? (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <CheckCircle className="h-3 w-3 text-success" />
-              <span>Auto-save on</span>
-            </div>
-          ) : (
-            <div className="text-xs text-warning">Not saving</div>
+          {/* Debug Panel Toggle */}
+          {isDebugMode && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setShowDebugPanel(true)}
+            >
+              <Settings className="h-4 w-4 mr-1" />
+              Debug
+            </Button>
           )}
+          
+          {/* Save Status Indicator */}
+          {saveStatus && (
+            <div className="flex items-center gap-2 text-sm">
+              {saveStatus === 'saving' && (
+                <>
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                  <span className="text-muted-foreground">Saving...</span>
+                </>
+              )}
+              {saveStatus === 'saved' && (
+                <>
+                  <CheckCircle className="h-3 w-3 text-green-600" />
+                  <span className="text-green-600">Saved</span>
+                </>
+              )}
+              {saveStatus === 'error' && (
+                <>
+                  <AlertCircle className="h-3 w-3 text-red-600" />
+                  <span className="text-red-600">Save failed</span>
+                </>
+              )}
+            </div>
+          )}
+          
+          {/* Timer */}
+          <div className="flex items-center space-x-1 text-sm font-mono">
+            <Clock className="h-4 w-4" />
+            <span>{formatTime(practiceSession.sessionTime)}</span>
+          </div>
+          
+          {/* Progress */}
+          <div className="flex items-center space-x-2">
+            <Progress value={progress} className="w-20" />
+            <span className="text-sm font-medium whitespace-nowrap">
+              {practiceSession.currentQuestion + 1} / {practiceSession.questions.length}
+            </span>
+          </div>
+          
           <Button variant="outline" size="sm" onClick={handleExit}>
-            Exit Practice
+            <LogOut className="h-4 w-4 mr-1" />
+            Exit
           </Button>
         </div>
       </div>
@@ -509,7 +540,7 @@ const EnhancedPracticeInterface = () => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Question Panel (70%) */}
-        <div className="lg:flex-[7] flex flex-col p-6 overflow-y-scroll scrollbar-stable lg:border-r">
+        <div className="lg:flex-[7] flex flex-col p-6 overflow-y-auto lg:border-r">
           {currentQuestion && (
             <div className="max-w-4xl mx-auto space-y-6">
               {/* Enhanced Reading View for Reading Questions */}
@@ -521,9 +552,9 @@ const EnhancedPracticeInterface = () => {
                   onFlag={handleFlag}
                 />
               ) : (
-                /* Regular Question View for Math/Verbal */
+                /* Regular Question View */
                 <div className="space-y-6">
-                  {/* Info banner for reading questions without passage */}
+                  {/* Missing passage warning */}
                   {currentQuestion.subject === 'Reading' && !currentQuestion.passage && (
                     <Card className="border-l-4 border-l-warning bg-warning/10">
                       <CardContent className="p-4">
@@ -561,7 +592,7 @@ const EnhancedPracticeInterface = () => {
                           {currentQuestion.questionText}
                         </div>
                         
-                        {/* Render question images if available */}
+                        {/* Question images */}
                         {currentQuestion.questionImages && currentQuestion.questionImages.length > 0 && (
                           <div className="mt-4 space-y-2">
                             {currentQuestion.questionImages.map((imageUrl, index) => (
@@ -598,52 +629,43 @@ const EnhancedPracticeInterface = () => {
                 </div>
               )}
 
-              {/* Fixed Navigation Bar */}
+              {/* Navigation Bar */}
               <div className="sticky bottom-0 bg-card border-t border-border p-6 mt-6 rounded-t-lg shadow-lg">
                 <div className="grid grid-cols-3 gap-4 items-center">
-                  {/* Previous Button - Left */}
                   <div className="flex justify-start">
                     <Button 
                       variant="outline" 
                       onClick={handlePrevious}
-                      disabled={session.currentQuestion === 0}
-                      className="flex items-center space-x-2 px-6 py-3 min-w-[120px] disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={practiceSession.currentQuestion === 0}
+                      className="flex items-center space-x-2 px-6 py-3"
                     >
                       <ChevronLeft className="w-4 h-4" />
                       <span>Previous</span>
                     </Button>
                   </div>
                   
-                  {/* Center - Progress & Auto-save indicator */}
                   <div className="flex flex-col justify-center items-center">
                     <span className="text-sm text-muted-foreground font-medium">
-                      {session.currentQuestion + 1} / {session.questions.length}
+                      {practiceSession.currentQuestion + 1} / {practiceSession.questions.length}
                     </span>
-                    {isAuthenticated && lastSavedAnswer && (
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                        <CheckCircle className="h-3 w-3 text-success" />
-                        <span>Auto-saved</span>
-                      </div>
-                    )}
                     <div className="text-xs text-muted-foreground mt-1">
-                      Press Enter to {session.currentQuestion === session.questions.length - 1 ? 'submit' : 'continue'}
+                      Press Enter to {practiceSession.currentQuestion === practiceSession.questions.length - 1 ? 'submit' : 'continue'}
                     </div>
                   </div>
                   
-                  {/* Next/Submit Button - Right */}
                   <div className="flex justify-end">
-                    {session.currentQuestion === session.questions.length - 1 ? (
+                    {practiceSession.currentQuestion === practiceSession.questions.length - 1 ? (
                       <Button 
                         onClick={handleFinishPractice} 
-                        className="flex items-center space-x-2 px-6 py-3 min-w-[120px] bg-success text-success-foreground hover:bg-success/90"
+                        className="flex items-center space-x-2 px-6 py-3"
                       >
                         <span>Submit</span>
-                        <Square className="w-4 h-4" />
+                        <Check className="w-4 h-4" />
                       </Button>
                     ) : (
                       <Button 
                         onClick={handleNext}
-                        className="flex items-center space-x-2 px-6 py-3 min-w-[120px] bg-primary text-primary-foreground hover:bg-primary/90"
+                        className="flex items-center space-x-2 px-6 py-3"
                       >
                         <span>Next</span>
                         <ChevronRight className="w-4 h-4" />
@@ -657,7 +679,7 @@ const EnhancedPracticeInterface = () => {
         </div>
 
         {/* Navigation Panel (30%) */}
-        <div className="lg:flex-[3] border-l bg-muted/30 p-4 space-y-4 overflow-y-scroll scrollbar-stable">
+        <div className="lg:flex-[3] border-l bg-muted/30 p-4 space-y-4 overflow-y-auto">
           <QuestionNavigator />
           <SessionControls />
           
@@ -672,6 +694,7 @@ const EnhancedPracticeInterface = () => {
               <div>F - Flag question</div>
               <div>Space - Pause/Resume</div>
               <div>Enter - Next/Submit</div>
+              {isDebugMode && <div>F12 - Debug panel</div>}
             </CardContent>
           </Card>
         </div>
@@ -703,10 +726,10 @@ const EnhancedPracticeInterface = () => {
         isOpen={showSubmitDialog}
         onConfirm={confirmSubmitPractice}
         onCancel={() => setShowSubmitDialog(false)}
-        totalQuestions={session.questions.length}
+        totalQuestions={practiceSession.questions.length}
         answeredCount={answeredCount}
         flaggedCount={flaggedCount}
-        timeSpent={formatTime(session.sessionTime)}
+        timeSpent={formatTime(practiceSession.sessionTime)}
       />
 
       {/* Exit Confirmation Dialog */}
@@ -715,7 +738,7 @@ const EnhancedPracticeInterface = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Exit Practice Session?</AlertDialogTitle>
             <AlertDialogDescription>
-              {isAuthenticated 
+              {user && practiceSession.serverSessionId
                 ? "Your progress has been automatically saved and you can resume later."
                 : "Your progress will be lost if you exit now."
               } Are you sure you want to leave?
@@ -727,6 +750,14 @@ const EnhancedPracticeInterface = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Debug Panel */}
+      {isDebugMode && (
+        <DebugPanel 
+          isOpen={showDebugPanel} 
+          onClose={() => setShowDebugPanel(false)} 
+        />
+      )}
     </div>
   );
 };

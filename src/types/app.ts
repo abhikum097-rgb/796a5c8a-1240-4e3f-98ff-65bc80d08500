@@ -113,6 +113,7 @@ export type AppAction =
   | { type: 'SET_DIFFICULTY_FILTER'; payload: string }
   | { type: 'SET_TIME_PERIOD'; payload: string }
   | { type: 'START_SESSION'; payload: Omit<PracticeSession, 'id' | 'userAnswers' | 'currentQuestion' | 'startTime' | 'sessionTime' | 'isPaused' | 'isCompleted'> & { serverSessionId?: string } }
+  | { type: 'HYDRATE_SESSION'; payload: PracticeSession }
   | { type: 'ANSWER_QUESTION'; payload: { questionId: string; answer: UserAnswer } }
   | { type: 'GO_TO_QUESTION'; payload: number }
   | { type: 'TOGGLE_FLAG'; payload: string }

@@ -64,6 +64,13 @@ function appReducer(state: AppState, action: AppAction): AppState {
       };
 
     case 'START_SESSION': {
+      console.group('🚀 Starting new practice session');
+      console.log('Session type:', action.payload.sessionType);
+      console.log('Test type:', action.payload.testType);
+      console.log('Server session ID:', action.payload.serverSessionId);
+      console.log('Questions loaded:', action.payload.questions.length);
+      console.groupEnd();
+
       const session: PracticeSession = {
         ...action.payload,
         id: `session_${Date.now()}`,
@@ -73,14 +80,28 @@ function appReducer(state: AppState, action: AppAction): AppState {
         sessionTime: 0,
         isPaused: false,
         isCompleted: false,
-        serverSessionId: action.payload.serverSessionId // Include server session ID
+        serverSessionId: action.payload.serverSessionId
       };
 
       return { ...state, practiceSession: session };
     }
 
+    case 'HYDRATE_SESSION': {
+      console.group('💧 Hydrating practice session from recovery');
+      console.log('Session ID:', action.payload.id);
+      console.log('Server session ID:', action.payload.serverSessionId);
+      console.log('Current question:', action.payload.currentQuestion);
+      console.log('Answered questions:', Object.keys(action.payload.userAnswers).length);
+      console.log('Session time:', Math.floor(action.payload.sessionTime / 60), 'minutes');
+      console.groupEnd();
+      
+      return { ...state, practiceSession: action.payload };
+    }
+
     case 'ANSWER_QUESTION': {
       if (!state.practiceSession) return state;
+      
+      console.log('📝 Answering question:', action.payload.questionId, 'with answer:', action.payload.answer.selectedAnswer);
       
       const { questionId, answer } = action.payload;
       const currentQuestion = state.practiceSession.questions.find(q => q.id === questionId);
@@ -97,6 +118,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
         }
       };
     }
+
+    // ... keep existing code (remaining cases)
 
     case 'GO_TO_QUESTION':
       if (!state.practiceSession) return state;
@@ -151,26 +174,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
       };
 
     case 'COMPLETE_SESSION': {
-      if (!state.practiceSession) return state;
-      
-      const answeredQuestions = Object.keys(state.practiceSession.userAnswers).length;
-      const correctAnswers = Object.entries(state.practiceSession.userAnswers)
-        .filter(([questionId, answer]) => {
-          const question = state.practiceSession?.questions.find(q => q.id === questionId);
-          return question && answer.selectedAnswer === question.correctAnswer;
-        }).length;
-      
-      const score = answeredQuestions > 0 ? Math.round((correctAnswers / answeredQuestions) * 100) : 0;
-      
-      return {
-        ...state,
-        practiceSession: {
-          ...state.practiceSession,
-          endTime: new Date(),
-          isCompleted: true,
-          score
-        }
-      };
+      console.log('🏁 Session completed');
+      return { ...state, practiceSession: null };
     }
 
     case 'UPDATE_ANALYTICS':
@@ -193,6 +198,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
 const AppContext = createContext<{
   state: AppState;
   dispatch: React.Dispatch<AppAction>;
+  isDebugMode: boolean;
 } | null>(null);
 
 // Type guards for proper type checking
@@ -369,11 +375,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Debug mode check
+  const isDebugMode = typeof window !== 'undefined' && (
+    new URLSearchParams(window.location.search).get('debug') === '1' ||
+    localStorage.getItem('debugMode') === '1'
+  );
+
   // Auto-save practice session to localStorage and hydrate on startup
   useEffect(() => {
     if (state.practiceSession && !state.practiceSession.isCompleted) {
+      console.log('💾 Auto-saving session to localStorage');
       localStorage.setItem('practiceSession', JSON.stringify(state.practiceSession));
-    } else {
+    } else if (state.practiceSession?.isCompleted || !state.practiceSession) {
       localStorage.removeItem('practiceSession');
     }
   }, [state.practiceSession]);
@@ -384,13 +397,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (savedSession && !state.practiceSession) {
       try {
         const parsedSession = JSON.parse(savedSession);
-        console.log('Hydrating session from localStorage:', parsedSession.id);
-        dispatch({
-          type: 'START_SESSION',
-          payload: parsedSession
-        });
+        
+        // Reconstruct dates from strings
+        parsedSession.startTime = new Date(parsedSession.startTime);
+        if (parsedSession.endTime) {
+          parsedSession.endTime = new Date(parsedSession.endTime);
+        }
+        
+        console.group('🔄 Hydrating session from localStorage');
+        console.log('Session found:', parsedSession.id);
+        console.log('Server session ID:', parsedSession.serverSessionId);
+        console.log('Questions:', parsedSession.questions?.length);
+        console.groupEnd();
+        
+        dispatch({ type: 'HYDRATE_SESSION', payload: parsedSession });
       } catch (error) {
-        console.error('Error parsing saved session:', error);
+        console.error('Failed to parse saved session:', error);
         localStorage.removeItem('practiceSession');
       }
     }
@@ -419,7 +441,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AppContext.Provider value={{ state, dispatch }}>
+    <AppContext.Provider value={{ state, dispatch, isDebugMode }}>
       {children}
     </AppContext.Provider>
   );
