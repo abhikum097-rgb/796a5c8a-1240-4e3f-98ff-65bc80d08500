@@ -55,7 +55,7 @@ serve(async (req) => {
       throw new Error('Session not found or access denied');
     }
 
-    // Get all answers for this session
+    // SECURITY: Get all answers and recompute correctness server-side
     const { data: answers, error: answersError } = await supabase
       .from('user_answers')
       .select('*')
@@ -66,8 +66,38 @@ serve(async (req) => {
       throw answersError;
     }
 
-    // Calculate score
-    const correctAnswers = answers?.filter(a => a.is_correct === true).length || 0;
+    // SECURITY: Get correct answers from questions table for validation
+    const questionIds = answers?.map(a => a.question_id).filter(Boolean) || [];
+    const { data: questions, error: questionsError } = await supabase
+      .from('questions')
+      .select('id, correct_answer')
+      .in('id', questionIds);
+
+    if (questionsError) {
+      console.error('Error fetching questions for validation:', questionsError);
+      throw questionsError;
+    }
+
+    // SECURITY: Recompute all correctness server-side and update if needed
+    let correctAnswers = 0;
+    const questionAnswers = new Map(questions?.map(q => [q.id, q.correct_answer]) || []);
+    
+    for (const answer of answers || []) {
+      const correctAnswer = questionAnswers.get(answer.question_id);
+      const isCorrect = answer.user_answer === correctAnswer;
+      
+      if (isCorrect) correctAnswers++;
+      
+      // Update answer if correctness was wrong (security fix)
+      if (answer.is_correct !== isCorrect) {
+        console.log(`Correcting answer for question ${answer.question_id}: was ${answer.is_correct}, should be ${isCorrect}`);
+        await supabase
+          .from('user_answers')
+          .update({ is_correct: isCorrect })
+          .eq('id', answer.id);
+      }
+    }
+
     const totalAnswered = answers?.length || 0;
     const score = totalAnswered > 0 ? Math.round((correctAnswers / session.total_questions) * 100) : 0;
     const percentageCorrect = totalAnswered > 0 ? Math.round((correctAnswers / totalAnswered) * 100) : 0;

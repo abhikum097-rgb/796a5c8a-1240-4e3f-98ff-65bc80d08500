@@ -59,7 +59,25 @@ serve(async (req) => {
       );
     }
 
-    const { image, prompt, metadata } = await req.json()
+    const { image, prompt, metadata } = await req.json();
+
+    // SECURITY: Input validation
+    if (!image || typeof image !== 'string') {
+      throw new Error('Valid image data is required');
+    }
+    
+    if (!prompt || typeof prompt !== 'string') {
+      throw new Error('Valid prompt is required');
+    }
+    
+    if (prompt.length > 5000) {
+      throw new Error('Prompt too long (max 5,000 characters)');
+    }
+    
+    // Basic image data validation (base64)
+    if (!image.startsWith('data:image/')) {
+      throw new Error('Invalid image format');
+    }
     
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
     if (!openaiApiKey) {

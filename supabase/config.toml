@@ -61,6 +61,9 @@ verify_jwt = false
 [functions.get-session-review]
 verify_jwt = true
 
+[functions.get-session-questions]
+verify_jwt = true
+
 [functions.process-question]
 verify_jwt = true
 

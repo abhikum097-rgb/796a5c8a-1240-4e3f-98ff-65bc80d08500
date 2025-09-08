@@ -102,7 +102,6 @@ export const useServerSession = () => {
     questionId: string;
     userAnswer: string;
     timeSpent: number;
-    isCorrect: boolean;
     isFlagged?: boolean;
   }) => {
     if (!user) return;

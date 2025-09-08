@@ -43,7 +43,6 @@ serve(async (req) => {
       questionId,
       userAnswer,
       timeSpent,
-      isCorrect,
       isFlagged = false,
       confidenceLevel
     } = body;
@@ -61,6 +60,20 @@ serve(async (req) => {
     if (sessionError || !session) {
       throw new Error('Session not found or access denied');
     }
+
+    // SECURITY: Get correct answer from database (server-side validation)
+    const { data: question, error: questionError } = await supabase
+      .from('questions')
+      .select('correct_answer')
+      .eq('id', questionId)
+      .single();
+
+    if (questionError || !question) {
+      throw new Error('Question not found');
+    }
+
+    // SECURITY: Calculate correctness server-side
+    const isCorrect = userAnswer === question.correct_answer;
 
     // Insert or update user answer with proper conflict resolution
     const { data: answer, error: answerError } = await supabase

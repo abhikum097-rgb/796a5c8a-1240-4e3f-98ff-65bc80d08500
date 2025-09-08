@@ -64,13 +64,15 @@ serve(async (req) => {
       console.log('Processing bulk import for admin user:', user.id);
     }
 
-    const { questions, overwrite_duplicates } = await req.json()
+    const { questions, overwrite_duplicates } = await req.json();
 
+    // SECURITY: Input validation
     if (!questions || !Array.isArray(questions)) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid questions data provided' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      throw new Error('Questions must be an array');
+    }
+    
+    if (questions.length > 1000) {
+      throw new Error('Too many questions (max 1,000 per batch)');
     }
 
     if (Deno.env.get('ENVIRONMENT') !== 'production') {

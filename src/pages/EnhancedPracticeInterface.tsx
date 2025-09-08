@@ -71,21 +71,17 @@ const EnhancedPracticeInterface = () => {
         // Load server session data
         const serverSession = await loadSession(sessionId);
         
-        // Fetch questions in the exact order they were presented
-        console.log('📋 Fetching questions in original order...');
-        const { data: questionsData, error: questionsError } = await supabase
-          .from('questions')
-          .select('*')
-          .in('id', serverSession.questions_order);
+        // SECURITY: Fetch safe questions only (no answers/explanations)
+        console.log('📋 Securely fetching questions...');
+        const { data, error: questionsError } = await supabase.functions.invoke('get-session-questions', {
+          body: { sessionId }
+        });
 
         if (questionsError) {
           throw new Error('Failed to load session questions');
         }
 
-        // Sort questions to match the original order
-        const sortedQuestions = serverSession.questions_order.map(qId => 
-          questionsData.find(q => q.id === qId)
-        ).filter(Boolean);
+        const sortedQuestions = data.questions;
 
         // Fetch existing user answers
         console.log('📝 Fetching existing user answers...');
@@ -136,8 +132,9 @@ const EnhancedPracticeInterface = () => {
               C: q.option_c,
               D: q.option_d
             },
-            correctAnswer: q.correct_answer as 'A' | 'B' | 'C' | 'D',
-            explanation: q.explanation,
+            // SECURITY: Hide answers during practice - will be revealed in results
+            correctAnswer: 'HIDDEN',
+            explanation: 'Available after session completion',
             timeAllocated: q.time_allocated || 60
           })),
           userAnswers,
@@ -186,9 +183,9 @@ const EnhancedPracticeInterface = () => {
     setShowPauseOverlay(practiceSession?.isPaused || false);
   }, [practiceSession?.isPaused]);
 
-  // Debounced auto-save function
+  // SECURITY: Debounced auto-save function (server determines correctness)
   const debouncedAutoSave = useCallback(
-    async (questionId: string, answer: UserAnswer, isCorrect: boolean) => {
+    async (questionId: string, answer: UserAnswer) => {
       if (!practiceSession?.serverSessionId || !user) return;
 
       setSaveStatus('saving');
@@ -200,7 +197,6 @@ const EnhancedPracticeInterface = () => {
           questionId,
           userAnswer: answer.selectedAnswer,
           timeSpent: answer.timeSpent,
-          isCorrect,
           isFlagged: answer.isFlagged
         });
 
@@ -346,7 +342,6 @@ const EnhancedPracticeInterface = () => {
   const handleAnswerSelect = (answer: 'A' | 'B' | 'C' | 'D') => {
     if (!currentQuestion) return;
 
-    const isCorrect = answer === currentQuestion.correctAnswer;
     const updatedAnswer: UserAnswer = {
       questionId: currentQuestion.id,
       selectedAnswer: answer,
@@ -357,9 +352,9 @@ const EnhancedPracticeInterface = () => {
 
     dispatch({ type: 'ANSWER_QUESTION', payload: { questionId: currentQuestion.id, answer: updatedAnswer } });
     
-    // Auto-save to server with debouncing
+    // SECURITY: Let server determine correctness - don't pass isCorrect from client
     if (practiceSession.serverSessionId) {
-      debouncedAutoSave(currentQuestion.id, updatedAnswer, isCorrect);
+      debouncedAutoSave(currentQuestion.id, updatedAnswer);
     }
   };
 
@@ -370,8 +365,7 @@ const EnhancedPracticeInterface = () => {
     // Auto-save flag status
     if (practiceSession.serverSessionId && currentAnswer) {
       const updatedAnswer = { ...currentAnswer, isFlagged: !currentAnswer.isFlagged };
-      const isCorrect = currentAnswer.selectedAnswer === currentQuestion.correctAnswer;
-      debouncedAutoSave(currentQuestion.id, updatedAnswer, isCorrect);
+      debouncedAutoSave(currentQuestion.id, updatedAnswer);
     }
   };
 

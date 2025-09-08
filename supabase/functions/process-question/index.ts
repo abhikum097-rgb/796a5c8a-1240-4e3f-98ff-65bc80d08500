@@ -60,7 +60,16 @@ serve(async (req) => {
       );
     }
 
-    const { prompt, metadata } = await req.json()
+    const { prompt, metadata } = await req.json();
+
+    // SECURITY: Input validation
+    if (!prompt || typeof prompt !== 'string') {
+      throw new Error('Valid prompt is required');
+    }
+    
+    if (prompt.length > 10000) {
+      throw new Error('Prompt too long (max 10,000 characters)');
+    }
     
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
     if (!openaiApiKey) {
