@@ -30,7 +30,7 @@ export const useSupabaseQuestions = () => {
         throw new Error(error.message || 'Failed to fetch questions');
       }
 
-      // Map snake_case database columns to camelCase Question type
+      // SECURITY: Map database columns to safe Question type (NO ANSWERS OR EXPLANATIONS during practice)
       const questions = (data?.questions || []).map((dbQuestion: any): Question => ({
         id: dbQuestion.id,
         testType: dbQuestion.test_type,
@@ -46,8 +46,9 @@ export const useSupabaseQuestions = () => {
           C: dbQuestion.option_c,
           D: dbQuestion.option_d
         },
-        correctAnswer: dbQuestion.correct_answer,
-        explanation: dbQuestion.explanation,
+        // SECURITY: Never expose correct answers or explanations during practice
+        correctAnswer: 'HIDDEN',
+        explanation: 'Available after session completion',
         timeAllocated: dbQuestion.time_allocated || 60
       }));
 

@@ -25,8 +25,8 @@ export interface Question {
     C: string;
     D: string;
   };
-  correctAnswer: 'A' | 'B' | 'C' | 'D';
-  explanation: string;
+  correctAnswer: 'A' | 'B' | 'C' | 'D' | 'HIDDEN';
+  explanation: string | 'Available after session completion';
   timeAllocated: number; // seconds
 }
 

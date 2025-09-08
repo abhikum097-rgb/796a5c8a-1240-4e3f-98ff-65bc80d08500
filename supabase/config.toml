@@ -57,3 +57,6 @@ verify_jwt = true
 
 [functions.get-topics]
 verify_jwt = false
+
+[functions.get-session-review]
+verify_jwt = true

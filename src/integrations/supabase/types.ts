@@ -105,7 +105,7 @@ export type Database = {
           topic: string | null
           total_questions: number
           total_time_spent: number | null
-          user_id: string | null
+          user_id: string
         }
         Insert: {
           created_at?: string | null
@@ -125,7 +125,7 @@ export type Database = {
           topic?: string | null
           total_questions: number
           total_time_spent?: number | null
-          user_id?: string | null
+          user_id: string
         }
         Update: {
           created_at?: string | null
@@ -145,7 +145,7 @@ export type Database = {
           topic?: string | null
           total_questions?: number
           total_time_spent?: number | null
-          user_id?: string | null
+          user_id?: string
         }
         Relationships: [
           {
@@ -317,7 +317,7 @@ export type Database = {
           stripe_subscription_id: string | null
           subscription_tier: string
           updated_at: string | null
-          user_id: string | null
+          user_id: string
         }
         Insert: {
           cancelled_at?: string | null
@@ -330,7 +330,7 @@ export type Database = {
           stripe_subscription_id?: string | null
           subscription_tier: string
           updated_at?: string | null
-          user_id?: string | null
+          user_id: string
         }
         Update: {
           cancelled_at?: string | null
@@ -343,7 +343,7 @@ export type Database = {
           stripe_subscription_id?: string | null
           subscription_tier?: string
           updated_at?: string | null
-          user_id?: string | null
+          user_id?: string
         }
         Relationships: [
           {
@@ -371,7 +371,7 @@ export type Database = {
           total_correct: number | null
           total_time_spent: number | null
           updated_at: string | null
-          user_id: string | null
+          user_id: string
         }
         Insert: {
           accuracy_percentage?: number | null
@@ -388,7 +388,7 @@ export type Database = {
           total_correct?: number | null
           total_time_spent?: number | null
           updated_at?: string | null
-          user_id?: string | null
+          user_id: string
         }
         Update: {
           accuracy_percentage?: number | null
@@ -405,7 +405,7 @@ export type Database = {
           total_correct?: number | null
           total_time_spent?: number | null
           updated_at?: string | null
-          user_id?: string | null
+          user_id?: string
         }
         Relationships: [
           {

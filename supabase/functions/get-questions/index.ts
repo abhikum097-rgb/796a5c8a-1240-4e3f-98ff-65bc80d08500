@@ -67,10 +67,10 @@ serve(async (req) => {
       }
     }
 
-    // Build query with filters and avoid recent questions
+    // Build query with filters and avoid recent questions - SECURITY: Only select safe columns
     let query = supabase
       .from('questions')
-      .select('*')
+      .select('id, test_type, subject, topic, difficulty_level, question_text, question_images, passage, option_a, option_b, option_c, option_d, time_allocated')
       .eq('test_type', testType)
       .eq('is_active', true);
 
@@ -107,7 +107,7 @@ serve(async (req) => {
       // First try without avoiding recent questions
       let allQuery = supabase
         .from('questions')
-        .select('*')
+        .select('id, test_type, subject, topic, difficulty_level, question_text, question_images, passage, option_a, option_b, option_c, option_d, time_allocated')
         .eq('test_type', testType)
         .eq('is_active', true);
 
@@ -125,7 +125,7 @@ serve(async (req) => {
       if (selectedQuestions.length < count && subject) {
         const { data: broadQuestions, error: broadError } = await supabase
           .from('questions')
-          .select('*')
+          .select('id, test_type, subject, topic, difficulty_level, question_text, question_images, passage, option_a, option_b, option_c, option_d, time_allocated')
           .eq('test_type', testType)
           .eq('subject', subject)
           .eq('is_active', true)
@@ -140,7 +140,7 @@ serve(async (req) => {
       if (selectedQuestions.length < count) {
         const { data: fallbackQuestions, error: fallbackError } = await supabase
           .from('questions')
-          .select('*')
+          .select('id, test_type, subject, topic, difficulty_level, question_text, question_images, passage, option_a, option_b, option_c, option_d, time_allocated')
           .eq('test_type', testType)
           .eq('is_active', true)
           .limit(count * 2);
