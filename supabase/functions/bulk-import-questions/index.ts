@@ -49,7 +49,20 @@ serve(async (req) => {
       )
     }
 
-    console.log('Processing bulk import for user:', user.id)
+    // Check admin role (defense in depth)
+    const { data: hasRole, error: roleError } = await supabaseClient
+      .rpc('has_role', { _user_id: user.id, _role: 'admin' });
+    
+    if (roleError || !hasRole) {
+      return new Response(
+        JSON.stringify({ error: 'Admin access required for bulk import' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (Deno.env.get('ENVIRONMENT') !== 'production') {
+      console.log('Processing bulk import for admin user:', user.id);
+    }
 
     const { questions, overwrite_duplicates } = await req.json()
 
@@ -60,7 +73,9 @@ serve(async (req) => {
       )
     }
 
-    console.log(`Processing ${questions.length} questions`)
+    if (Deno.env.get('ENVIRONMENT') !== 'production') {
+      console.log(`Processing ${questions.length} questions`);
+    }
 
     const results = {
       successful: 0,
@@ -147,7 +162,9 @@ serve(async (req) => {
       }
     }
 
-    console.log('Bulk import completed:', results)
+    if (Deno.env.get('ENVIRONMENT') !== 'production') {
+      console.log('Bulk import completed:', results);
+    }
 
     return new Response(
       JSON.stringify({

@@ -13,7 +13,17 @@ export const useAuth = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Get initial session
+    // Set up auth state listener FIRST to prevent race conditions
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        console.log('Auth event:', event);
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+      }
+    );
+
+    // THEN get initial session
     const getInitialSession = async () => {
       const { data: { session }, error } = await supabase.auth.getSession();
       if (error) {
@@ -25,16 +35,6 @@ export const useAuth = () => {
     };
 
     getInitialSession();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('Auth event:', event);
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-      }
-    );
 
     return () => subscription.unsubscribe();
   }, []);

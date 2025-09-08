@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_function_usage: {
+        Row: {
+          call_count: number
+          created_at: string
+          date: string
+          function_name: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          call_count?: number
+          created_at?: string
+          date?: string
+          function_name: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          call_count?: number
+          created_at?: string
+          date?: string
+          function_name?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       document_sessions: {
         Row: {
           created_at: string | null
@@ -566,6 +596,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_ai_function_limit: {
+        Args: { p_daily_limit?: number; p_function_name: string }
+        Returns: boolean
+      }
       get_available_topics: {
         Args: { p_subject?: string; p_test_type: string }
         Returns: {

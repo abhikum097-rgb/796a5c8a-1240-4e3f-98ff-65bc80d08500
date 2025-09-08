@@ -21,7 +21,9 @@ serve(async (req) => {
     const body = await req.json();
     const { testType, subject } = body;
 
-    console.log('Fetching topics for:', { testType, subject });
+    if (Deno.env.get('ENVIRONMENT') !== 'production') {
+      console.log('Fetching topics for:', { testType, subject });
+    }
 
     // Use the database function to get topics
     const { data: topics, error } = await supabase
@@ -35,7 +37,9 @@ serve(async (req) => {
       throw error;
     }
 
-    console.log(`Found ${topics?.length || 0} topics`);
+    if (Deno.env.get('ENVIRONMENT') !== 'production') {
+      console.log(`Found ${topics?.length || 0} topics`);
+    }
 
     return new Response(
       JSON.stringify({ 
