@@ -7,6 +7,7 @@ import { useApp } from "@/context/AppContext";
 import { useNavigate } from "react-router-dom";
 import { useSupabaseQuestions } from "@/hooks/useSupabaseQuestions";
 import { useAuth } from "@/hooks/useAuth";
+import { useServerSession } from "@/hooks/useServerSession";
 import { toast } from "@/hooks/use-toast";
 
 const Topics = () => {
@@ -14,6 +15,7 @@ const Topics = () => {
   const navigate = useNavigate();
   const { fetchQuestions } = useSupabaseQuestions();
   const { isAuthenticated, requireAuth } = useAuth();
+  const { createSession } = useServerSession();
   const subjects = state.analytics.performanceBySubject;
 
   const getMasteryColor = (mastery: string) => {
@@ -91,34 +93,25 @@ const Topics = () => {
                             }
 
                             try {
-                              const questions = await fetchQuestions({
+                              const result = await createSession({
+                                sessionType: 'topic_practice',
                                 testType: state.user?.selectedTest || 'SHSAT',
                                 subject: subject.subject,
                                 topic: topic.topic,
-                                count: 15,
-                                strict: true
+                                difficulty: undefined,
+                                questionsData: undefined
                               });
 
-                              if (questions.length === 0) {
+                              if (!result?.session) {
                                 toast({
-                                  title: "No Questions Available",
-                                  description: `No questions found for ${topic.topic} in ${subject.subject}. Try selecting a different topic or add more questions to the database.`,
+                                  title: "Error",
+                                  description: "Failed to create practice session. Please try again.",
                                   variant: "destructive"
                                 });
                                 return;
                               }
 
-                              dispatch({
-                                type: 'START_SESSION',
-                                payload: {
-                                  testType: state.user?.selectedTest || 'SHSAT',
-                                  sessionType: 'topic_practice',
-                                  subject: subject.subject as 'Math' | 'Verbal' | 'Reading',
-                                  topic: topic.topic,
-                                  questions
-                                }
-                              });
-                              navigate(`/dashboard/practice/session/${Date.now()}`);
+                              navigate(`/practice/session/${result.session.id}`);
                             } catch (error) {
                               console.error('Error starting topic practice:', error);
                               toast({

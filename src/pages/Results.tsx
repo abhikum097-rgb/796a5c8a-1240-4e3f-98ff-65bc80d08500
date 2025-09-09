@@ -17,12 +17,14 @@ import {
   Play
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
-import { generateMockQuestions } from "@/mock/data";
+import { useServerSession } from "@/hooks/useServerSession";
+import { toast } from "@/hooks/use-toast";
 
 const Results = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const { state, dispatch } = useApp();
+  const { createSession } = useServerSession();
   
   const session = state.practiceSession;
 
@@ -80,29 +82,35 @@ const Results = () => {
 
   const averageTimePerQuestion = Math.round(session.sessionTime / answeredQuestions) || 0;
 
-  const handleRetakePractice = () => {
-    const questions = generateMockQuestions(
-      session.questions.length,
-      {
-        subject: session.subject,
-        topic: session.topic,
-        difficulty: session.difficulty
-      }
-    );
-    
-    dispatch({
-      type: 'START_SESSION',
-      payload: {
-        testType: session.testType,
+  const handleRetakePractice = async () => {
+    try {
+      const result = await createSession({
         sessionType: session.sessionType,
+        testType: session.testType,
         subject: session.subject,
         topic: session.topic,
         difficulty: session.difficulty,
-        questions
+        questionsData: undefined
+      });
+
+      if (!result?.session) {
+        toast({
+          title: "Error",
+          description: "Failed to create practice session. Please try again.",
+          variant: "destructive"
+        });
+        return;
       }
-    });
-    
-    navigate(`/dashboard/practice/session/${Date.now()}`);
+
+      navigate(`/practice/session/${result.session.id}`);
+    } catch (error) {
+      console.error('Error retaking practice:', error);
+      toast({
+        title: "Error",
+        description: "Failed to start practice session. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   // Calculate performance by topic
