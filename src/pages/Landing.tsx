@@ -40,9 +40,9 @@ const Landing = () => {
                 Start Free Trial
               </Button>
             </Link>
-            <Link to="/dashboard/practice">
+            <Link to="/register">
               <Button variant="outline" size="lg" className="text-lg px-8">
-                Start Practicing
+                Get Started
               </Button>
             </Link>
           </div>

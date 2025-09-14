@@ -20,6 +20,15 @@ export const useAuth = () => {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+
+        // Handle successful login and redirect to intended destination
+        if (event === 'SIGNED_IN' && session?.user) {
+          const redirectPath = sessionStorage.getItem('redirectAfterLogin');
+          if (redirectPath) {
+            sessionStorage.removeItem('redirectAfterLogin');
+            navigate(redirectPath);
+          }
+        }
       }
     );
 
@@ -37,7 +46,7 @@ export const useAuth = () => {
     getInitialSession();
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [navigate]);
 
   const signOut = async () => {
     try {
@@ -60,8 +69,12 @@ export const useAuth = () => {
     }
   };
 
-  const requireAuth = () => {
+  const requireAuth = (redirectTo?: string) => {
     if (!user && !loading) {
+      // Store the intended destination for redirect after login
+      if (redirectTo) {
+        sessionStorage.setItem('redirectAfterLogin', redirectTo);
+      }
       toast({
         title: "Authentication Required",
         description: "Please log in to access this feature.",
