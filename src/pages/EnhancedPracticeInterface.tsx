@@ -24,7 +24,7 @@ const EnhancedPracticeInterface = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const { state, dispatch, isDebugMode } = useApp();
-  const { user, requireAuth } = useAuth();
+  const { user, requireAuth, loading: authLoading } = useAuth();
   const { loadSession, submitAnswer, updateSessionProgress } = useServerSession();
   
   const [showExitDialog, setShowExitDialog] = useState(false);
@@ -46,10 +46,28 @@ const EnhancedPracticeInterface = () => {
       console.log('URL sessionId:', sessionId);
       console.log('Current session in state:', practiceSession?.id);
       console.log('Server session ID in state:', practiceSession?.serverSessionId);
+      console.log('User authenticated:', !!user);
+      console.log('Auth loading:', authLoading);
       
       if (!sessionId) {
         console.log('❌ No sessionId in URL');
         setSessionNotFound(true);
+        setSessionLoading(false);
+        console.groupEnd();
+        return;
+      }
+
+      // Wait for authentication to complete
+      if (authLoading) {
+        console.log('⏳ Waiting for authentication...');
+        console.groupEnd();
+        return;
+      }
+
+      // Require authentication before proceeding
+      if (!user) {
+        console.log('❌ User not authenticated, redirecting...');
+        requireAuth(`/practice/session/${sessionId}`);
         setSessionLoading(false);
         console.groupEnd();
         return;
@@ -176,7 +194,7 @@ const EnhancedPracticeInterface = () => {
     };
 
     initializeSession();
-  }, [sessionId, practiceSession, loadSession, dispatch]);
+  }, [sessionId, practiceSession, loadSession, dispatch, user, authLoading, requireAuth]);
 
   // Show pause overlay when session is paused
   useEffect(() => {
@@ -285,8 +303,29 @@ const EnhancedPracticeInterface = () => {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [practiceSession, showDebugPanel, isDebugMode]);
 
-  if (sessionLoading || questionsLoading) {
+  if (authLoading || sessionLoading || questionsLoading) {
     return <PracticeLoadingSkeleton />;
+  }
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Card className="w-96">
+          <CardHeader className="text-center">
+            <AlertCircle className="h-12 w-12 mx-auto mb-4 text-warning" />
+            <CardTitle>Authentication Required</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <p className="text-muted-foreground">
+              Please log in to access your practice session.
+            </p>
+            <Button onClick={() => navigate('/login')} className="w-full">
+              Log In
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   if (sessionNotFound) {

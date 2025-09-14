@@ -75,21 +75,31 @@ export const useServerSession = () => {
     setError(null);
 
     try {
+      console.log('Loading session:', sessionId, 'for user:', user.id);
+      
       const { data, error } = await supabase
         .from('practice_sessions')
         .select('*')
         .eq('id', sessionId)
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (error) {
-        throw new Error('Session not found');
+        console.error('Database error loading session:', error);
+        throw new Error(`Database error: ${error.message}`);
       }
 
+      if (!data) {
+        console.error('Session not found or not accessible:', sessionId);
+        throw new Error('Session not found or you do not have access to it');
+      }
+
+      console.log('Successfully loaded session:', data);
       setSession(data);
       return data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load session';
+      console.error('loadSession error:', errorMessage);
       setError(errorMessage);
       throw err;
     } finally {
