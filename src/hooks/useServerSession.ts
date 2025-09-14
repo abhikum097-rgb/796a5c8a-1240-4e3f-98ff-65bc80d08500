@@ -68,6 +68,7 @@ export const useServerSession = () => {
 
   const loadSession = useCallback(async (sessionId: string) => {
     if (!user) {
+      console.error('loadSession called without authenticated user');
       throw new Error('User must be authenticated');
     }
 
@@ -76,6 +77,15 @@ export const useServerSession = () => {
 
     try {
       console.log('Loading session:', sessionId, 'for user:', user.id);
+      
+      // First check if we have a valid session token
+      const { data: { session: authSession } } = await supabase.auth.getSession();
+      if (!authSession) {
+        console.error('No valid auth session found');
+        throw new Error('Authentication session expired. Please log in again.');
+      }
+
+      console.log('Auth session valid, loading practice session from database...');
       
       const { data, error } = await supabase
         .from('practice_sessions')
@@ -90,7 +100,7 @@ export const useServerSession = () => {
       }
 
       if (!data) {
-        console.error('Session not found or not accessible:', sessionId);
+        console.error('Session not found or not accessible:', sessionId, 'for user:', user.id);
         throw new Error('Session not found or you do not have access to it');
       }
 

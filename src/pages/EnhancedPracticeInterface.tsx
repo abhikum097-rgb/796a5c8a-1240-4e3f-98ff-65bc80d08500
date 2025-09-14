@@ -25,7 +25,7 @@ const EnhancedPracticeInterface = () => {
   const navigate = useNavigate();
   const { state, dispatch, isDebugMode } = useApp();
   const { user, requireAuth, loading: authLoading } = useAuth();
-  const { loadSession, submitAnswer, updateSessionProgress } = useServerSession();
+  const { loadSession, submitAnswer, updateSessionProgress, error } = useServerSession();
   
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
@@ -67,11 +67,25 @@ const EnhancedPracticeInterface = () => {
       // Require authentication before proceeding
       if (!user) {
         console.log('❌ User not authenticated, redirecting...');
-        requireAuth(`/practice/session/${sessionId}`);
+        setSessionNotFound(true);
         setSessionLoading(false);
+        requireAuth(`/practice/session/${sessionId}`);
         console.groupEnd();
         return;
       }
+
+      // Check if we have a valid authentication session
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session) {
+          console.log('❌ No valid auth session, redirecting to login...');
+          setSessionNotFound(true);
+          setSessionLoading(false);
+          requireAuth(`/practice/session/${sessionId}`);
+          console.groupEnd();
+          return;
+        }
+        console.log('✅ Valid auth session found, proceeding with session load...');
+      });
 
       // If we have a session with matching server ID, we're good
       if (practiceSession && practiceSession.serverSessionId === sessionId) {
@@ -328,24 +342,33 @@ const EnhancedPracticeInterface = () => {
     );
   }
 
-  if (sessionNotFound) {
+  if (sessionNotFound || error) {
     return (
       <div className="flex items-center justify-center h-screen">
         <Card className="w-96">
           <CardHeader className="text-center">
             <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
-            <CardTitle>Session Not Found</CardTitle>
+            <CardTitle>Session Error</CardTitle>
           </CardHeader>
           <CardContent className="text-center space-y-4">
             <p className="text-muted-foreground">
-              We couldn't find your practice session. It may have expired or been removed.
+              {error || "We couldn't find your practice session. It may have expired or been removed."}
             </p>
             <div className="space-y-2">
               <Button onClick={() => navigate('/practice')} className="w-full">
                 Start New Practice
               </Button>
+              {error && error.includes('Authentication') && (
+                <Button 
+                  onClick={() => requireAuth(`/practice/session/${sessionId}`)} 
+                  variant="outline" 
+                  className="w-full"
+                >
+                  Log In Again
+                </Button>
+              )}
               <Button onClick={() => navigate('/dashboard')} variant="outline" className="w-full">
-                Back to Dashboard
+                Return to Dashboard
               </Button>
             </div>
           </CardContent>

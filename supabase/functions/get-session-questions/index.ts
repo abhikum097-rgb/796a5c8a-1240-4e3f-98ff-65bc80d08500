@@ -48,10 +48,16 @@ serve(async (req) => {
       .select('*')
       .eq('id', sessionId)
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
-    if (sessionError || !session) {
-      throw new Error('Session not found or access denied');
+    if (sessionError) {
+      console.error('Database error fetching session:', sessionError);
+      throw new Error(`Database error: ${sessionError.message}`);
+    }
+
+    if (!session) {
+      console.error('Session not found or access denied for session:', sessionId, 'user:', user.id);
+      throw new Error('Session not found or you do not have access to it');
     }
 
     // Fetch SAFE question data only (no correct answers or explanations)
